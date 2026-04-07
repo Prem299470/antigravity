@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "hexstrike-ai": {
+      "command": "python",
+      "args": [
+        "c:/Users/kprv9/Downloads/everything-claude-code-main/hexstrike-ai-master/hexstrike_mcp.py",
+        "--server",
+        "http://127.0.0.1:8888"
+      ],
+      "description": "HexStrike AI v6.0 - Advanced Cybersecurity Automation Platform",
+      "timeout": 300,
+      "alwaysAllow": []
+    }
+  }
+}
