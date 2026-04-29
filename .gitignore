@@ -11,8 +11,12 @@ playground/
 prompting/
 repo_temp/
 scratch/
+.netlify/
+portfolio/.netlify/
 
 installation_id
+
+skills/* - Copy*
 
 .DS_Store
 Thumbs.db
