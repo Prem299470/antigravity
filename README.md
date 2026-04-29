@@ -1,99 +1,87 @@
 # Antigravity
 
-Antigravity is a curated Gemini workspace that packages a reusable skill library, MCP configuration, and a presentation-ready portfolio site into a shareable repository. It is designed to support multi-step AI work such as coding, research, design, automation, and cybersecurity workflows while keeping personal runtime data out of version control.
+Antigravity is a publish-safe snapshot of a Gemini workspace built around reusable AI skills, MCP integrations, and a static cybersecurity portfolio. The repository is structured so it can be cloned, reviewed, and extended without carrying along private runtime state from the local machine where it was created.
 
-## Overview
+## Highlights
 
-This repository captures the portable layer of a larger local AI workspace:
+- `2076` skill packs collected under `skills/`
+- `4263` tracked files covering prompts, references, scripts, and assets
+- a standalone `portfolio/` site with a downloadable resume
+- root-level MCP configuration for reproducible local tool setup
+- ignore rules that keep conversations, temp artifacts, and local workspace data out of Git
 
-- a large `skills/` library with reusable instructions, assets, scripts, and references
-- an `mcp_config.json` file for connecting supported MCP services
-- a polished static `portfolio/` site for a cybersecurity-focused personal profile
-- documentation that explains how the workspace is organized and what should or should not be published
-
-The result is a clean GitHub-friendly structure that can be cloned, reviewed, extended, or reused without carrying along private local state.
-
-## Repository Structure
+## Repository Map
 
 ```text
 antigravity/
-|-- portfolio/         # Static portfolio website and downloadable resume
-|-- skills/            # Installed reusable skills, references, and helper assets
-|-- .gitignore         # Publish-safe ignore rules for local workspace data
-|-- mcp_config.json    # MCP server configuration
-`-- README.md          # Repository overview
+|-- portfolio/        # Static portfolio site and resume asset
+|-- skills/           # Reusable skill library; each pack centers on SKILL.md
+|-- mcp_config.json   # MCP server configuration; update local paths after cloning
+|-- CONTRIBUTING.md   # Contribution guidelines and publishing hygiene
+|-- SECURITY.md       # Vulnerability reporting and safe-use notes
+|-- LICENSING.md      # Licensing and attribution guidance for mixed-source content
+|-- .gitignore        # Local-only workspace exclusions
+`-- README.md         # Repository overview
 ```
 
-## Key Components
+## What This Repository Contains
 
-### 1. Skill Library
+### `skills/`
 
-The `skills/` directory is the core of the workspace. It contains a large set of reusable skill packs for different domains such as:
+The `skills/` directory is the core of the repository. It packages a large reusable instruction library for AI-assisted work across areas such as:
 
 - software engineering
 - frontend and backend development
-- AI application building
-- cloud and DevOps workflows
-- security analysis and penetration testing
-- documentation, planning, and automation
+- automation and workflow design
+- cloud and platform operations
+- cybersecurity, pentesting, and defensive analysis
+- documentation, planning, and research
 
-Many skills include their own `README.md`, example assets, scripts, and reference material.
+Most skill packs are organized around a `SKILL.md` file and may also include helper scripts, examples, references, or assets.
 
-### 2. MCP Configuration
+### `portfolio/`
 
-`mcp_config.json` stores the Model Context Protocol server configuration used by the local workspace. This enables external tools and structured integrations to be connected in a repeatable way.
+The `portfolio/` directory contains a self-contained static website for Prem Ranjith Varma K. It is built with plain HTML, CSS, and JavaScript and showcases cybersecurity experience, selected projects, skills, and contact details.
 
-### 3. Portfolio Website
+See [portfolio/README.md](./portfolio/README.md) for the portfolio-specific file map.
 
-The `portfolio/` directory contains a standalone static personal portfolio for Prem Ranjith Varma K. It is built with plain HTML, CSS, and JavaScript, and highlights cybersecurity skills, projects, experience, and contact details.
+### `mcp_config.json`
 
-See [portfolio/README.md](./portfolio/README.md) for the portfolio-specific breakdown.
+The root MCP configuration captures the local Model Context Protocol setup used by the workspace. If you clone this repository, review and update any machine-specific command paths before using it on another system.
 
-## What Is Included
+## What Is Intentionally Excluded
 
-- reusable skills and their supporting content
-- portfolio source files and downloadable resume
-- MCP configuration required to reproduce the workspace structure
-- repository documentation for contributors or reviewers
+The repository is meant to stay clean and public-shareable, so local runtime data is ignored by default. That includes:
 
-## What Is Excluded
-
-The following local-only workspace data is intentionally ignored:
-
-- conversations and runtime context
-- annotations and temporary artifacts
+- conversations and context memory
+- annotations and generated workspace artifacts
+- scratch, playground, and temporary folders
 - browser recordings
-- scratch and playground files
-- local Netlify state
-- accidental duplicate `skills/* - Copy*` folders or files
+- local Netlify runtime state
+- duplicate `skills/* - Copy*` directories
 
-This keeps the GitHub repository focused, portable, and safer to share publicly.
+This keeps the published repository focused on reusable assets rather than machine-specific history.
 
-## Getting Started
+## Quick Start
 
-### Explore the workspace
+1. Clone the repository.
+2. Browse `skills/` and open the packs relevant to your workflow.
+3. Open `portfolio/index.html` in a browser to preview the static site locally.
+4. Review `mcp_config.json` and replace any local absolute paths with paths that match your environment.
 
-Browse the root directories and open the skill folders most relevant to your use case. Many skills include their own internal documentation and helper assets.
-
-### View the portfolio locally
-
-Open `portfolio/index.html` in a browser to preview the static site.
-
-### Review MCP setup
-
-Inspect `mcp_config.json` and update it as needed for your local environment before using external MCP services.
-
-## Use Cases
+## Good Fit For
 
 This repository is useful if you want to:
 
-- maintain a reusable AI workspace for structured task execution
-- keep a large personal skill library under version control
-- pair practical AI tooling with a professional portfolio site
-- publish a clean snapshot of your working environment without leaking runtime data
+- maintain a large reusable skill library for AI-assisted execution
+- keep a structured prompt and reference workspace under version control
+- pair AI tooling infrastructure with a professional cybersecurity portfolio
+- publish a curated workspace snapshot without leaking private runtime data
 
-## Notes
+## Repository Notes
 
-- This repo intentionally favors portability and structure over bundling private local state.
-- The portfolio is self-contained and can be deployed independently on any static hosting platform.
-- The workspace can grow over time by adding or refining skill packs inside `skills/`.
+- There is no root build step or package manager requirement for browsing this repository.
+- The portfolio can be deployed independently on any static host such as GitHub Pages or Netlify.
+- Some bundled skill directories may include their own licenses or attribution notes. See [LICENSING.md](./LICENSING.md) before reusing content wholesale.
+- If you plan to contribute, start with [CONTRIBUTING.md](./CONTRIBUTING.md).
+- If you need to report a security issue or potentially sensitive publish concern, see [SECURITY.md](./SECURITY.md).
