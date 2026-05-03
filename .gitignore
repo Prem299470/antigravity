@@ -1,3 +1,4 @@
+# Metadata & System Logs
 annotations/
 brain/
 browser_recordings/
@@ -10,16 +11,19 @@ knowledge/
 playground/
 prompting/
 repo_temp/
-# scratch/
-scratch/*.log
-scratch/*.out
-scratch/*.err
-scratch/.netlify/
-.netlify/
-
 installation_id
 
-skills/* - Copy*
+# Application Logs
+*.log
+*.out
+*.err
 
+# Netlify
+.netlify/
+
+# OS Specific
 .DS_Store
 Thumbs.db
+
+# Backups
+skills/* - Copy*

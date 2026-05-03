@@ -1,5 +1,5 @@
 // ==========================================
-// CyberShield AI — Application Logic
+// Cyber Shield AI — Application Logic
 // ==========================================
 
 const PASSWORD_STORAGE_KEY = 'cybershield-password-manager';
@@ -14,7 +14,7 @@ const websiteKnowledgeBase = [
         id: 'dashboard',
         keywords: ['dashboard', 'home', 'overview', 'main page'],
         title: 'Security Dashboard',
-        summary: 'The dashboard is the command center of CyberShield AI. It provides entry points into all major tools through cards and the sidebar so the user can jump directly into scans, monitoring, and emergency workflows.',
+        summary: 'The dashboard is the command center of Cyber Shield AI. It provides entry points into all major tools through cards and the sidebar so the user can jump directly into scans, monitoring, and emergency workflows.',
         steps: ['Open a tool from the sidebar or dashboard card.', 'Run an analysis or monitoring session.', 'Review the results panel or live telemetry.']
     },
     {
@@ -807,7 +807,7 @@ function buildWebsiteKnowledgeAnswer(question) {
             .filter(section => section.id !== 'dashboard')
             .map(section => section.title)
             .join(', ');
-        return 'This website is CyberShield AI, a browser-based cybersecurity dashboard. It includes these main sections: ' + featureList + '. ' +
+        return 'This website is Cyber Shield AI, a browser-based cybersecurity dashboard. It includes these main sections: ' + featureList + '. ' +
             'The dashboard acts as the command center and each section opens an interactive tool with its own scan flow, monitoring panel, or recovery workflow.';
     }
 
@@ -958,7 +958,7 @@ function buildChatbotAppContext() {
     const inspectionSummary = buildWebsiteInspectionSummary();
 
     return [
-        'CyberShield AI is a browser-based cybersecurity dashboard.',
+        'Cyber Shield AI is a browser-based cybersecurity dashboard.',
         'Available tools include Scam Detection, Password Checker, Real-Time File Scanner, Safe Browsing, Transaction Analyzer, Digital Footprint Tracker, Live Network Monitoring, Live GPS Tracker, Emergency Response Mode, and Shield Box AI.',
         'Shield Box AI should feel like a capable LLM assistant rather than a narrow scripted chatbot. It should give direct, well-structured, context-aware answers and only mention website workflows first when the question is about this app.',
         'OpenRouter is the preferred model backend when the user provides an API key.',
@@ -1116,7 +1116,7 @@ async function askOpenAI(question) {
 
     const body = {
         model: 'gpt-5',
-        instructions: 'You are Shield Box AI, an advanced LLM-style AI assistant for this CyberShield website and a cybersecurity-focused copilot. You should sound like a capable AI model, not a scripted chatbot. Be accurate, concise, and helpful. Use the provided app context when answering website questions. For cybersecurity questions, prioritize defensive guidance, secure engineering, threat detection, and incident response. Use matched cyber grounding when present, and do not contradict it without saying why. Refuse harmful cyber-abuse instructions and redirect to prevention or safe learning. If you are unsure, say so instead of guessing. Avoid markdown tables. Relevant context: ' + buildRelevantWebsiteContext(question) + ' App context: ' + buildChatbotAppContext() + ' Cybersecurity role context: ' + buildCybersecurityDomainContext() + ' Matched cyber grounding: ' + buildCybersecurityGrounding(question),
+        instructions: 'You are Shield Box AI, an advanced LLM-style AI assistant for this Cyber Shield website and a cybersecurity-focused copilot. You should sound like a capable AI model, not a scripted chatbot. Be accurate, concise, and helpful. Use the provided app context when answering website questions. For cybersecurity questions, prioritize defensive guidance, secure engineering, threat detection, and incident response. Use matched cyber grounding when present, and do not contradict it without saying why. Refuse harmful cyber-abuse instructions and redirect to prevention or safe learning. If you are unsure, say so instead of guessing. Avoid markdown tables. Relevant context: ' + buildRelevantWebsiteContext(question) + ' App context: ' + buildChatbotAppContext() + ' Cybersecurity role context: ' + buildCybersecurityDomainContext() + ' Matched cyber grounding: ' + buildCybersecurityGrounding(question),
         input: question,
         store: false
     };
@@ -1190,7 +1190,7 @@ async function askGemini(question) {
         body: JSON.stringify({
             system_instruction: {
                 parts: [{
-                    text: 'You are Shield Box AI, an advanced LLM-style AI assistant for this CyberShield website and a cybersecurity-focused copilot. You should sound like a capable AI model, not a scripted chatbot. Be accurate, concise, and helpful. For website questions, answer using the provided app context. For cybersecurity questions, focus on defense, hardening, detection, incident response, and safe education. Use matched cyber grounding when present, and do not contradict it without saying why. Refuse harmful cyber-abuse instructions and redirect to prevention or safe lab practice. If uncertain, say you are not sure. Avoid markdown tables.'
+                    text: 'You are Shield Box AI, an advanced LLM-style AI assistant for this Cyber Shield website and a cybersecurity-focused copilot. You should sound like a capable AI model, not a scripted chatbot. Be accurate, concise, and helpful. For website questions, answer using the provided app context. For cybersecurity questions, focus on defense, hardening, detection, incident response, and safe education. Use matched cyber grounding when present, and do not contradict it without saying why. Refuse harmful cyber-abuse instructions and redirect to prevention or safe lab practice. If uncertain, say you are not sure. Avoid markdown tables.'
                 }]
             },
             contents: buildGeminiContents(question),
@@ -9796,7 +9796,7 @@ function shareLiveLocationWhatsApp() {
     const mapUrl = 'https://www.google.com/maps?q=' + encodeURIComponent(gpsLastPosition.lat + ',' + gpsLastPosition.lng);
 
     const message = [
-        'My current live location from CyberShield AI:',
+        'My current live location from Cyber Shield AI:',
         'Address: ' + address,
         street,
         time,
@@ -10192,8 +10192,8 @@ function exportGPSRoute() {
 
     // Generate GPX file
     let gpx = '<?xml version="1.0" encoding="UTF-8"?>\n';
-    gpx += '<gpx version="1.1" creator="CyberShield AI GPS Tracker">\n';
-    gpx += '  <trk>\n    <name>CyberShield GPS Track — ' + new Date().toISOString() + '</name>\n    <trkseg>\n';
+    gpx += '<gpx version="1.1" creator="Cyber Shield AI GPS Tracker">\n';
+    gpx += '  <trk>\n    <name>Cyber Shield GPS Track — ' + new Date().toISOString() + '</name>\n    <trkseg>\n';
     gpsRouteData.forEach(function(pt) {
         gpx += '      <trkpt lat="' + pt.lat + '" lon="' + pt.lng + '">';
         if (pt.altitude !== null) gpx += '<ele>' + pt.altitude + '</ele>';
