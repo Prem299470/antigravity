@@ -10,7 +10,11 @@ knowledge/
 playground/
 prompting/
 repo_temp/
-scratch/
+# scratch/
+scratch/*.log
+scratch/*.out
+scratch/*.err
+scratch/.netlify/
 .netlify/
 portfolio/.netlify/
 

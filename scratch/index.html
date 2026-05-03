@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CyberShield AI — Your all-in-one AI-powered cybersecurity suite. Detect scams, check passwords, browse safely, scan apps, analyze transactions, track your digital footprint, and respond to emergencies.">
+    <title>CyberShield AI — Intelligent Cybersecurity Suite</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Animated Background -->
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+    <div class="bg-logo" aria-hidden="true">
+        <svg viewBox="0 0 900 900" fill="none">
+            <defs>
+                <linearGradient id="bgShieldStroke" x1="220" y1="170" x2="690" y2="735" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#dffcff"/>
+                    <stop offset="0.45" stop-color="#56dfff"/>
+                    <stop offset="1" stop-color="#8d73ff"/>
+                </linearGradient>
+                <linearGradient id="bgShieldFill" x1="255" y1="190" x2="655" y2="690" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#0ff6ff" stop-opacity="0.22"/>
+                    <stop offset="0.45" stop-color="#0f8bff" stop-opacity="0.14"/>
+                    <stop offset="1" stop-color="#632bff" stop-opacity="0.18"/>
+                </linearGradient>
+            </defs>
+            <path d="M450 86 182 210v223c0 180 113 349 268 399 155-50 268-219 268-399V210L450 86Z" fill="url(#bgShieldFill)" stroke="url(#bgShieldStroke)" stroke-width="18"/>
+            <path d="M450 168 262 258v171c0 132 81 256 188 295 107-39 188-163 188-295V258L450 168Z" stroke="url(#bgShieldStroke)" stroke-width="12" opacity="0.8"/>
+            <path d="M367 560 450 438 533 560" stroke="#e9fbff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+            <path d="M450 320v134" stroke="#e9fbff" stroke-width="24" stroke-linecap="round" opacity="0.9"/>
+        </svg>
+    </div>
+
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 40 40" fill="none">
+                        <path d="M20 2.8 7 8.9v10.6c0 8.7 5.49 16.83 13 19.28 7.51-2.45 13-10.58 13-19.28V8.9L20 2.8Z" fill="url(#logoShell)" stroke="url(#logoEdge)" stroke-width="2.1"/>
+                        <path d="M20 6.8 10.8 11.2v8.1c0 6.36 3.9 12.33 9.2 14.25 5.3-1.92 9.2-7.89 9.2-14.25v-8.1L20 6.8Z" fill="url(#logoInner)" fill-opacity="0.98"/>
+                        <path d="M20 6.8 10.8 11.2v8.1c0 6.36 3.9 12.33 9.2 14.25" stroke="rgba(255,255,255,0.22)" stroke-width="0.9"/>
+                        <path d="M20 9.8 14.9 12.4v4.55c0 3.85 2.16 7.47 5.1 8.92 2.94-1.45 5.1-5.07 5.1-8.92V12.4L20 9.8Z" fill="url(#coreGlass)" stroke="url(#logoEdge)" stroke-width="1.2"/>
+                        <path d="M16.2 24.2 20 18.6 23.8 24.2" stroke="#e9fbff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M20 13.2v6.2" stroke="#e9fbff" stroke-width="1.7" stroke-linecap="round"/>
+                        <ellipse cx="20" cy="31.4" rx="5.8" ry="1.8" fill="url(#logoShadow)" opacity="0.65"/>
+                        <defs>
+                            <linearGradient id="logoShell" x1="9" y1="4" x2="31" y2="36" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#0ff6ff" stop-opacity="0.96"/>
+                                <stop offset="0.45" stop-color="#0f8bff" stop-opacity="0.88"/>
+                                <stop offset="1" stop-color="#632bff" stop-opacity="0.96"/>
+                            </linearGradient>
+                            <linearGradient id="logoInner" x1="12" y1="8" x2="28" y2="31" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#071a32"/>
+                                <stop offset="0.5" stop-color="#0d2447"/>
+                                <stop offset="1" stop-color="#1f1750"/>
+                            </linearGradient>
+                            <linearGradient id="coreGlass" x1="16" y1="11" x2="25" y2="25" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#8af9ff" stop-opacity="0.95"/>
+                                <stop offset="0.45" stop-color="#2bc3ff" stop-opacity="0.9"/>
+                                <stop offset="1" stop-color="#7b5cff" stop-opacity="0.92"/>
+                            </linearGradient>
+                            <linearGradient id="logoEdge" x1="10" y1="5" x2="30" y2="35" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#dffcff"/>
+                                <stop offset="0.4" stop-color="#56dfff"/>
+                                <stop offset="1" stop-color="#8d73ff"/>
+                            </linearGradient>
+                            <radialGradient id="logoShadow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(20 31.4) rotate(90) scale(1.8 5.8)">
+                                <stop stop-color="#3ecfff"/>
+                                <stop offset="1" stop-color="#3ecfff" stop-opacity="0"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <span class="logo-text">CyberShield<span class="logo-ai">AI</span></span>
+            </div>
+        </div>
+
+        <ul class="nav-links">
+            <li>
+                <a href="#" class="nav-link active" data-section="dashboard" id="nav-dashboard">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                    </span>
+                    <span class="nav-text">Dashboard</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link" data-section="scam-detection" id="nav-scam">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                    </span>
+                    <span class="nav-text">Scam Detection</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link" data-section="password-checker" id="nav-password">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="12" cy="16" r="1"/></svg>
+                    </span>
+                    <span class="nav-text">Password Checker</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link" data-section="file-scanner" id="nav-file-scanner">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M9 15l2 2 4-4"/></svg>
+                    </span>
+                    <span class="nav-text">File Scanner</span>
+                    <span class="new-badge">NEW</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link" data-section="safe-browsing" id="nav-browsing">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                    </span>
+                    <span class="nav-text">Advanced Safe Browsing</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link" data-section="transaction-analyzer" id="nav-transaction">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                    </span>
+                    <span class="nav-text">Smart Investigation Engine</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link" data-section="footprint-tracker" id="nav-footprint">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </span>
+                    <span class="nav-text">Footprint Tracker</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link" data-section="live-network-monitoring" id="nav-live-network">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17h16M7 13h10M10 9h4"/><circle cx="6" cy="17" r="1.5"/><circle cx="12" cy="13" r="1.5"/><circle cx="18" cy="17" r="1.5"/><circle cx="12" cy="9" r="1.5"/></svg>
+                    </span>
+                    <span class="nav-text">Live Network Monitoring</span>
+                    <span class="new-badge">LIVE</span>
+                </a>
+            </li>
+
+            <li>
+                <a href="#" class="nav-link" data-section="wifi-connections" id="nav-wifi-connections">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+                    </span>
+                    <span class="nav-text">Wi-Fi Scanner</span>
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link" data-section="live-gps-tracker" id="nav-live-gps">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/><circle cx="12" cy="12" r="8" stroke-dasharray="4 2"/></svg>
+                    </span>
+                    <span class="nav-text">Live GPS Tracker</span>
+                    <span class="new-badge">LIVE</span>
+                </a>
+            </li>
+
+            <li>
+                <a href="#" class="nav-link" data-section="emergency-response" id="nav-emergency">
+                    <span class="nav-icon emergency-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.93 4.93l14.14 14.14M12 2v4m0 12v4m-8-10H2m20 0h-2m-2.93-6.07l-1.41 1.41m-7.32 7.32l-1.41 1.41m0-10.14l1.41 1.41m7.32 7.32l1.41 1.41"/></svg>
+                    </span>
+                    <span class="nav-text">Emergency Mode</span>
+                    <span class="emergency-badge">SOS</span>
+                </a>
+            </li>
+        </ul>
+
+        <div class="sidebar-footer">
+            <div class="status-indicator">
+                <span class="status-dot"></span>
+                <span class="status-text">AI Engine Active</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Mobile Header -->
+    <header class="mobile-header" id="mobileHeader">
+        <button class="hamburger" id="hamburger" aria-label="Toggle navigation">
+            <span></span><span></span><span></span>
+        </button>
+        <span class="mobile-logo">CyberShield<span class="logo-ai">AI</span></span>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+
+        <!-- ========== DASHBOARD ========== -->
+        <section class="content-section active" id="section-dashboard">
+            <div class="section-header">
+                <h1>Security Dashboard</h1>
+                <p class="section-subtitle">Your AI-powered cybersecurity command center</p>
+            </div>
+
+            <div class="dashboard-stats">
+                <div class="stat-card" data-section="scam-detection">
+                    <div class="stat-icon scam-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Scam Detection</h3>
+                        <p>Identify phishing messages &amp; fake links</p>
+                    </div>
+                    <span class="stat-arrow">→</span>
+                </div>
+                <div class="stat-card" data-section="password-checker">
+                    <div class="stat-icon password-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Password Checker</h3>
+                        <p>Detect compromised credentials</p>
+                    </div>
+                    <span class="stat-arrow">→</span>
+                </div>
+                <div class="stat-card" data-section="file-scanner">
+                    <div class="stat-icon file-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M9 15l2 2 4-4"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Real-Time File Scanner</h3>
+                        <p>Drag, drop, and scan files with VirusTotal</p>
+                    </div>
+                    <span class="stat-arrow">→</span>
+                </div>
+                <div class="stat-card" data-section="safe-browsing">
+                    <div class="stat-icon browsing-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Advanced Safe Browsing</h3>
+                        <p>Multi-module URL risk analysis</p>
+                    </div>
+                    <span class="stat-arrow">→</span>
+                </div>
+                <div class="stat-card" data-section="transaction-analyzer">
+                    <div class="stat-icon transaction-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Smart Investigation</h3>
+                        <p>Multi-module phone number intel</p>
+                    </div>
+                    <span class="stat-arrow">→</span>
+                </div>
+                <div class="stat-card" data-section="footprint-tracker">
+                    <div class="stat-icon footprint-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Footprint Tracker</h3>
+                        <p>Monitor your digital presence</p>
+                    </div>
+                    <span class="stat-arrow">→</span>
+                </div>
+                <div class="stat-card" data-section="live-network-monitoring">
+                    <div class="stat-icon network-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17h16M7 13h10M10 9h4"/><circle cx="6" cy="17" r="1.5"/><circle cx="12" cy="13" r="1.5"/><circle cx="18" cy="17" r="1.5"/><circle cx="12" cy="9" r="1.5"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Live Network Monitoring</h3>
+                        <p>Watch active connections and suspicious requests</p>
+                    </div>
+                    <span class="stat-arrow">→</span>
+                </div>
+
+                <div class="stat-card" data-section="live-gps-tracker">
+                    <div class="stat-icon gps-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/><circle cx="12" cy="12" r="8" stroke-dasharray="4 2"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Live GPS Tracker</h3>
+                        <p>Track your real-time location via GPS</p>
+                    </div>
+                    <span class="stat-arrow">→</span>
+                </div>
+                <div class="stat-card" data-section="wifi-connections" id="dashWifiCard" style="position:relative;overflow:hidden;">
+                    <div class="stat-icon" style="background:linear-gradient(135deg,rgba(14,165,233,.2),rgba(99,102,241,.2));border-radius:12px;padding:.75rem;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Wi-Fi Scanner</h3>
+                        <p id="dashWifiStatus">Scan to see connected devices</p>
+                    </div>
+                    <span id="dashWifiCount" style="display:none;position:absolute;top:.75rem;right:2.5rem;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:#fff;font-size:.7rem;font-weight:700;padding:.2rem .6rem;border-radius:10px;"></span>
+                    <span class="stat-arrow">→</span>
+                </div>
+                <div class="stat-card emergency-card" data-section="emergency-response">
+                    <div class="stat-icon emergency-stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.93 4.93l14.14 14.14M12 2v4m0 12v4m-8-10H2m20 0h-2"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Emergency Response</h3>
+                        <p>Recovery steps if hacked</p>
+                    </div>
+                    <span class="stat-arrow">→</span>
+                </div>
+            </div>
+
+            <div class="dashboard-banner">
+                <div class="banner-content">
+                    <div class="banner-icon">
+                        <svg viewBox="0 0 48 48" fill="none">
+                            <path d="M24 4 8.2 11.4v12.9c0 10.09 6.67 19.5 15.8 22.26 9.13-2.76 15.8-12.17 15.8-22.26V11.4L24 4Z" fill="url(#bannerShell)" stroke="url(#bannerEdge)" stroke-width="2.5"/>
+                            <path d="M24 8.7 12.8 14v9.78c0 7.67 4.75 14.82 11.2 17.14 6.45-2.32 11.2-9.47 11.2-17.14V14L24 8.7Z" fill="url(#bannerInner)"/>
+                            <path d="M24 12.1 17.8 15.2v5.54c0 4.54 2.64 8.8 6.2 10.52 3.56-1.72 6.2-5.98 6.2-10.52V15.2L24 12.1Z" fill="url(#bannerCore)" stroke="url(#bannerEdge)" stroke-width="1.4"/>
+                            <path d="M19.3 28.3 24 21.2 28.7 28.3" stroke="#ebfcff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M24 16.1v7.4" stroke="#ebfcff" stroke-width="2.1" stroke-linecap="round"/>
+                            <ellipse cx="24" cy="37.6" rx="7.2" ry="2.2" fill="url(#bannerShadow)" opacity="0.72"/>
+                            <defs>
+                                <linearGradient id="bannerShell" x1="10" y1="5" x2="38" y2="43" gradientUnits="userSpaceOnUse">
+                                    <stop stop-color="#12f5ff"/>
+                                    <stop offset="0.4" stop-color="#1796ff"/>
+                                    <stop offset="1" stop-color="#6b38ff"/>
+                                </linearGradient>
+                                <linearGradient id="bannerInner" x1="14" y1="10" x2="34" y2="39" gradientUnits="userSpaceOnUse">
+                                    <stop stop-color="#081a33"/>
+                                    <stop offset="0.5" stop-color="#0f284b"/>
+                                    <stop offset="1" stop-color="#201652"/>
+                                </linearGradient>
+                                <linearGradient id="bannerCore" x1="19" y1="13" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+                                    <stop stop-color="#8cfaff"/>
+                                    <stop offset="0.48" stop-color="#2cc2ff"/>
+                                    <stop offset="1" stop-color="#835fff"/>
+                                </linearGradient>
+                                <linearGradient id="bannerEdge" x1="11" y1="6" x2="37" y2="42" gradientUnits="userSpaceOnUse">
+                                    <stop stop-color="#e6fdff"/>
+                                    <stop offset="0.45" stop-color="#62e0ff"/>
+                                    <stop offset="1" stop-color="#9980ff"/>
+                                </linearGradient>
+                                <radialGradient id="bannerShadow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(24 37.6) rotate(90) scale(2.2 7.2)">
+                                    <stop stop-color="#3bcfff"/>
+                                    <stop offset="1" stop-color="#3bcfff" stop-opacity="0"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2>All Systems Protected</h2>
+                        <p>CyberShield AI is actively monitoring your digital security. Select a tool above to begin analysis.</p>
+                    </div>
+                </div>
+                <div class="shield-pulse"></div>
+            </div>
+        </section>
+
+        <!-- ========== SCAM DETECTION ========== -->
+        <section class="content-section" id="section-scam-detection">
+            <div class="section-header">
+                <h1>AI Scam Detection</h1>
+                <p class="section-subtitle">Analyze messages, emails, and links for phishing &amp; fraud indicators</p>
+            </div>
+            <div class="tool-container">
+                <div class="input-card">
+                    <h2>Paste Suspicious Content</h2>
+                    <p class="input-desc">Enter the email body, message text, or URL you want to analyze</p>
+                    <p class="input-desc">Hybrid stack: BERT semantic main model, Random Forest secondary classifier, Isolation Forest anomaly detection, and regex rules for known attacks.</p>
+                    <p class="input-desc">The analyzer returns strict JSON for system integration, covering text risk, link risk, trust signals, classification, confidence, risk level, reasons, red flags, and a one-line verdict.</p>
+                    <textarea id="scamInput" class="input-textarea" rows="8" placeholder="Paste suspicious email, message, or link here...&#10;&#10;Example: Dear Customer, your account has been suspended. Click here to verify: http://secure-bank-login.xyz/verify"></textarea>
+                    <button class="btn-primary" id="scamAnalyzeBtn" onclick="analyzeScam()">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+                        Analyze for Threats
+                    </button>
+                </div>
+                <div class="results-card hidden" id="scamResults">
+                    <div class="results-header">
+                        <h2>Analysis Results</h2>
+                        <div class="threat-badge" id="scamThreatBadge">—</div>
+                    </div>
+                    <div class="results-body" id="scamResultsBody"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== PASSWORD CHECKER ========== -->
+        <section class="content-section" id="section-password-checker">
+            <div class="section-header">
+                <h1>Password &amp; Data Leak Checker</h1>
+                <p class="section-subtitle">Check password strength, detect breaches, and generate secure passwords</p>
+            </div>
+            <div class="tool-container">
+                <div class="input-card">
+                    <h2>Check Your Password</h2>
+                    <p class="input-desc">Enter a password to analyze its strength, check for known breaches, and save it with the website or app it belongs to</p>
+                    <input type="text" id="passwordOwnerInput" class="input-field" placeholder="Belongs to (e.g., Gmail, Instagram, SBI Banking)" autocomplete="off">
+                    <div class="password-input-wrap">
+                        <input type="password" id="passwordInput" class="input-field" placeholder="Enter password to check..." autocomplete="off">
+                        <button class="toggle-password" id="togglePassword" onclick="togglePasswordVisibility()" aria-label="Toggle password visibility">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                    </div>
+                    <div class="strength-meter" id="strengthMeter">
+                        <div class="strength-bar"><div class="strength-fill" id="strengthFill"></div></div>
+                        <span class="strength-label" id="strengthLabel">Enter a password</span>
+                    </div>
+                    <button class="btn-primary" onclick="checkPassword()">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></span>
+                        Check Password
+                    </button>
+                    <button class="btn-secondary" onclick="savePasswordEntry()">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg></span>
+                        Save to Manager
+                    </button>
+                    <div class="divider"><span>or</span></div>
+                    <button class="btn-secondary" onclick="generatePassword()">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4m-8-10H2m20 0h-2m-2.93-6.07l-1.41 1.41m-7.32 7.32l-1.41 1.41m0-10.14l1.41 1.41m7.32 7.32l1.41 1.41"/></svg></span>
+                        Generate Strong Password
+                    </button>
+                    <div class="password-manager-card">
+                        <div class="password-manager-header">
+                            <div>
+                                <h3>Password Manager</h3>
+                                <p class="input-desc">Saved locally in this browser for quick access</p>
+                            </div>
+                            <button class="copy-btn manager-clear-btn" onclick="clearSavedPasswords()">Clear All</button>
+                        </div>
+                        <div class="password-manager-list" id="passwordManagerList"></div>
+                    </div>
+                </div>
+                <div class="results-card hidden" id="passwordResults">
+                    <div class="results-header">
+                        <h2>Password Analysis</h2>
+                        <div class="threat-badge" id="passwordThreatBadge">—</div>
+                    </div>
+                    <div class="results-body" id="passwordResultsBody"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== REAL-TIME FILE SCANNER ========== -->
+        <section class="content-section" id="section-file-scanner">
+            <div class="section-header">
+                <h1>Real-Time File Scanner</h1>
+                <p class="section-subtitle">Drag and drop a file to scan instantly for malware signatures and suspicious extensions using local heuristics plus the VirusTotal API</p>
+            </div>
+            <div class="tool-container">
+                <div class="input-card">
+                    <h2>Drag &amp; Drop File Scan</h2>
+                    <p class="input-desc">Files are hashed locally first. If you provide a VirusTotal API key, the scanner will look up the file by SHA-256 and upload it only when needed.</p>
+                    <input type="password" id="vtApiKeyInput" class="input-field" placeholder="VirusTotal API key (stored only in this browser)">
+                    <div class="file-dropzone" id="fileDropzone" tabindex="0" role="button" aria-label="Drop a file here or choose a file">
+                        <div class="file-dropzone-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        </div>
+                        <h3>Drop file here</h3>
+                        <p>or click to choose a file from your device</p>
+                        <span class="file-dropzone-meta" id="fileDropzoneMeta">Scans suspicious extensions instantly and uses VirusTotal when available.</span>
+                    </div>
+                    <input type="file" id="fileScannerInput" class="hidden" aria-hidden="true">
+                    <div class="file-actions">
+                        <button class="btn-primary" id="fileScanBtn" onclick="scanSelectedFile()">
+                            <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+                            Scan Selected File
+                        </button>
+                        <button class="btn-secondary" onclick="clearSelectedFile()">
+                            <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg></span>
+                            Clear File
+                        </button>
+                    </div>
+                    <div class="file-selected-card hidden" id="fileSelectedCard">
+                        <div class="file-selected-header">
+                            <div>
+                                <h3 id="fileSelectedName">No file selected</h3>
+                                <p id="fileSelectedMeta">Select a file to begin scanning.</p>
+                            </div>
+                            <span class="network-panel-chip" id="fileSelectedBadge">Ready</span>
+                        </div>
+                        <div class="file-hash-grid">
+                            <div class="file-hash-item">
+                                <span>SHA-256</span>
+                                <code id="fileSha256Value">Pending...</code>
+                            </div>
+                            <div class="file-hash-item">
+                                <span>Suspicious Extension</span>
+                                <code id="fileExtensionValue">Pending...</code>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tips-section">
+                        <h3 class="tips-title">How This Scan Works</h3>
+                        <div class="tip-item">
+                            <span class="tip-number">1</span>
+                            <div><strong>Instant local pre-check</strong><p>The browser inspects file size, name, extension, and computes a SHA-256 hash without uploading the file.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">2</span>
+                            <div><strong>VirusTotal lookup first</strong><p>The scanner checks whether the file hash already exists in VirusTotal before uploading anything.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">3</span>
+                            <div><strong>Upload only if needed</strong><p>For files under 32 MB it posts directly to <code>/files</code>; larger files request an upload URL first, following the official VirusTotal API flow.</p></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="results-card hidden" id="fileScannerResults">
+                    <div class="results-header">
+                        <h2>File Scan Results</h2>
+                        <div class="threat-badge" id="fileScannerThreatBadge">—</div>
+                    </div>
+                    <div class="results-body" id="fileScannerResultsBody"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== ADVANCED SAFE BROWSING ENGINE ========== -->
+        <section class="content-section" id="section-safe-browsing">
+            <div class="section-header">
+                <h1>Advanced Safe Browsing Engine</h1>
+                <p class="section-subtitle">A multi-layered investigation tool analyzing URLs via Reputation, Structure, Sandbox, NLP, and Graph relationships</p>
+            </div>
+            <div class="tool-container">
+                <div class="input-card">
+                    <h2>Check Website Safety</h2>
+                    <p class="input-desc">Enter a URL to analyze its reputation, SSL status, and safety</p>
+                    <input type="url" id="urlInput" class="input-field" placeholder="https://example.com">
+                    <button class="btn-primary" onclick="checkBrowsing()">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg></span>
+                        Scan Website
+                    </button>
+                </div>
+                <div class="results-card hidden" id="browsingResults">
+                    <div class="results-header">
+                        <h2>Investigation Report</h2>
+                        <div class="threat-badge" id="browsingThreatBadge">—</div>
+                    </div>
+                    <div class="results-body" id="browsingResultsBody"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== SMART INVESTIGATION ENGINE ========== -->
+        <section class="content-section" id="section-transaction-analyzer">
+            <div class="section-header">
+                <h1>Smart Investigation Engine</h1>
+                <p class="section-subtitle">A multi-module ML-powered intelligence dashboard for phone number analysis</p>
+            </div>
+            <div class="tool-container">
+                <div class="input-card">
+                    <h2>Check a Number</h2>
+                    <p class="input-desc">This checker now prefers exact number matches from previous cases saved in this browser. Weak partial matches are shown separately and do not count as confirmed case hits.</p>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Phone Number</label>
+                            <input type="tel" id="txPhoneNumber" class="input-field" placeholder="e.g., +91 98765 43210">
+                        </div>
+                        <div class="form-group">
+                            <label>Claimed Name (optional)</label>
+                            <input type="text" id="txClaimedName" class="input-field" placeholder="e.g., Rahul Sharma">
+                        </div>
+                        <div class="form-group">
+                            <label>Interaction Type</label>
+                            <select id="txInteractionType" class="input-field">
+                                <option value="upi">UPI / payment request</option>
+                                <option value="call">Phone call</option>
+                                <option value="whatsapp">WhatsApp / chat</option>
+                                <option value="sms">SMS / message</option>
+                                <option value="seller">Seller / marketplace</option>
+                                <option value="support">Customer support / service desk</option>
+                                <option value="personal">Personal contact</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Casebook Match Mode</label>
+                            <select id="txCaseMode" class="input-field">
+                                <option value="strict">Exact number match only</option>
+                                <option value="last10">Allow cautious last 10 digits fallback</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group full-width">
+                        <label>Conversation or Case Details (optional)</label>
+                        <textarea id="txDetails" class="input-textarea" rows="4" placeholder="Paste what they said, why they contacted you, payment request details, urgency, refund request, OTP ask, etc."></textarea>
+                    </div>
+                    <button class="btn-primary" onclick="analyzePhoneNumberReputation()">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>
+                        Check Number
+                    </button>
+                </div>
+                <div class="results-card hidden" id="transactionResults">
+                    <div class="results-header">
+                        <h2>Investigation Report</h2>
+                        <div class="threat-badge" id="transactionThreatBadge">—</div>
+                    </div>
+                    <div class="results-body" id="transactionResultsBody"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== DIGITAL FOOTPRINT TRACKER ========== -->
+        <section class="content-section" id="section-footprint-tracker">
+            <div class="section-header">
+                <h1>Digital Footprint Tracker</h1>
+                <p class="section-subtitle">Monitor your online presence and get privacy improvement suggestions</p>
+            </div>
+            <div class="tool-container">
+                <div class="input-card">
+                    <h2>Track Your Digital Presence</h2>
+                    <p class="input-desc">Enter your username, phone number, or full name to check exposure. Username mode uses the Cyberlayers digital_footprint_tracker baseline plus extended checks.</p>
+                    <p class="input-desc">Phone mode uses public evidence only, and full-name mode now runs a broader multi-platform public sweep across social apps, professional networks, communities, creative sites, and optional people-search traces.</p>
+                    <input type="text" id="footprintInput" class="input-field" placeholder="Enter username, phone number, or full name">
+                    <div class="checkbox-group">
+                        <label class="checkbox-option">
+                            <input type="checkbox" id="fpSocial" checked> <span>Social Media</span>
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="checkbox" id="fpForums" checked> <span>Forums & Communities</span>
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="checkbox" id="fpProfessional" checked> <span>Professional Networks</span>
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="checkbox" id="fpDataBrokers"> <span>Data Brokers</span>
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="checkbox" id="fpPhoneLookup" checked> <span>Phone Lookups</span>
+                        </label>
+                    </div>
+                    <button class="btn-primary" onclick="trackFootprint()">
+                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
+                        Scan Digital Footprint
+                    </button>
+
+                    <!-- Privacy Tips -->
+                    <div class="tips-section">
+                        <h3 class="tips-title">💡 Privacy Protection Tips</h3>
+                        <div class="tip-item">
+                            <span class="tip-number">1</span>
+                            <div><strong>Google Yourself Regularly</strong><p>Search your name, email, and phone number to see what's publicly visible.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">2</span>
+                            <div><strong>Lock Down Social Media</strong><p>Set profiles to private, disable location tagging, and limit who can see your posts.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">3</span>
+                            <div><strong>Use Unique Usernames</strong><p>Don't reuse the same username across platforms — it makes tracking you easier.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">4</span>
+                            <div><strong>Opt Out of Data Brokers</strong><p>Request removal from sites like Spokeo, WhitePages, and BeenVerified.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">5</span>
+                            <div><strong>Use a VPN on Public Wi-Fi</strong><p>Encrypt your traffic to prevent snooping on open networks.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">6</span>
+                            <div><strong>Review App Permissions</strong><p>Revoke unnecessary permissions — apps don't need access to everything.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">7</span>
+                            <div><strong>Delete Unused Accounts</strong><p>Old accounts with weak passwords are easy targets for hackers.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">8</span>
+                            <div><strong>Enable 2FA Everywhere</strong><p>Two-factor authentication blocks 99% of automated attacks on your accounts.</p></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="results-card hidden" id="footprintResults">
+                    <div class="results-header">
+                        <h2>Footprint Report</h2>
+                        <div class="threat-badge" id="footprintThreatBadge">—</div>
+                    </div>
+                    <div class="results-body" id="footprintResultsBody"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== LIVE NETWORK MONITORING ========== -->
+        <section class="content-section" id="section-live-network-monitoring">
+            <div class="section-header">
+                <h1>Advanced Network Investigation Engine</h1>
+                <p class="section-subtitle">Real-time behavior analysis, domain intelligence, and graph relationship mapping</p>
+                <div class="header-badges">
+                    <span class="badge badge-active" id="networkEngineStatusBadge">ENGINE ACTIVE</span>
+                    <span class="badge badge-risk-safe" id="networkRiskBadge">MONITORING</span>
+                </div>
+            </div>
+            <div class="tool-container network-full-width">
+                <div class="input-card">
+                    <h2>Continuous Traffic Capture</h2>
+                    <p class="input-desc">Converts network activity into meaningful signals. Analyzes request frequency, data size, timing patterns, and protocol usage to detect anomalies in real time.</p>
+
+                    <div class="network-controls">
+                        <button class="btn-primary network-start-btn" id="networkStartBtn" onclick="startNetworkMonitoring()">
+                            <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></span>
+                            Start Investigation
+                        </button>
+                        <button class="btn-secondary hidden" id="networkStopBtn" onclick="stopNetworkMonitoring()">
+                            <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></span>
+                            Stop Engine
+                        </button>
+                        <button class="btn-secondary" id="networkRefreshBtn" onclick="refreshNetworkMonitoring()">
+                            <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg></span>
+                            Analyze Current Snapshot
+                        </button>
+                    </div>
+
+                    <div class="network-status-bar" id="networkStatusBar">
+                        <div class="network-status-dot" id="networkStatusDot"></div>
+                        <div class="network-status-copy">
+                            <strong id="networkStatusText">Idle. Start investigation to begin traffic analysis.</strong>
+                            <span id="networkSourceText">Advanced Mode: AI-driven behavioral telemetry + graph mapping.</span>
+                        </div>
+                    </div>
+
+                    <div class="network-overview" id="networkOverview">
+                        <div class="network-metric-card">
+                            <div class="network-metric-label">Signal Confidence</div>
+                            <div class="network-metric-value" id="networkWebsocketState">98%</div>
+                            <div class="network-metric-subtext">Telemetry accuracy</div>
+                        </div>
+                        <div class="network-metric-card">
+                            <div class="network-metric-label">Relationship Links</div>
+                            <div class="network-metric-value" id="networkConnectionCount">0</div>
+                            <div class="network-metric-subtext">Active graph nodes</div>
+                        </div>
+                        <div class="network-metric-card">
+                            <div class="network-metric-label">Anomaly Score</div>
+                            <div class="network-metric-value" id="networkSuspiciousCount">0</div>
+                            <div class="network-metric-subtext">Deviation detected</div>
+                        </div>
+                        <div class="network-metric-card">
+                            <div class="network-metric-label">Exfiltration Risk</div>
+                            <div class="network-metric-value" id="networkProfile">Low</div>
+                            <div class="network-metric-subtext" id="networkProfileMeta">Outbound flow normal</div>
+                        </div>
+                    </div>
+
+                    <div class="network-hero-grid">
+                        <div class="network-hero-card">
+                            <div class="network-hero-label">Primary Investigation Target</div>
+                            <div class="network-hero-value" id="networkPublicIp">Detecting...</div>
+                            <div class="network-hero-subtext" id="networkPublicLocation">Resolving infrastructure details...</div>
+                        </div>
+                        <div class="network-hero-card">
+                            <div class="network-hero-label">Latest Intelligence Signal</div>
+                            <div class="network-hero-value" id="networkLatestEvent">No signals yet</div>
+                            <div class="network-hero-subtext" id="networkLatestEventMeta">The investigation feed will append intelligence here.</div>
+                        </div>
+                    </div>
+
+                    <div class="network-graph-container" id="networkGraphContainer">
+                        <div class="network-graph-overlay">
+                            <div class="graph-legend">
+                                <div class="legend-item"><span class="dot safe"></span> Safe Node</div>
+                                <div class="legend-item"><span class="dot warning"></span> Suspicious</div>
+                                <div class="legend-item"><span class="dot critical"></span> Threat</div>
+                            </div>
+                            <div class="graph-status" id="graphStatusText">Mapping relationship nodes...</div>
+                        </div>
+                        <canvas id="networkGraphCanvas"></canvas>
+                    </div>
+
+                    <div class="network-panel-grid">
+                        <div class="network-panel">
+                            <div class="network-panel-header">
+                                <h3>Behavioral Activity Graph</h3>
+                                <span class="network-panel-chip">Real-time Flow</span>
+                            </div>
+                            <div class="network-list" id="networkConnectionsList">
+                                <div class="network-empty-state">No traffic captured. Start investigation to populate the relationship map.</div>
+                            </div>
+                        </div>
+
+                        <div class="network-panel">
+                            <div class="network-panel-header">
+                                <h3>Security Findings & Anomalies</h3>
+                                <span class="network-panel-chip warning">Ensemble ML</span>
+                            </div>
+                            <div class="network-list" id="networkAlertsList">
+                                <div class="network-empty-state">No anomalies detected. Scanning for data exfiltration and C2 beaconing...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tips-section">
+                        <h3 class="tips-title">Investigation Engine Capabilities</h3>
+                        <div class="tip-item">
+                            <span class="tip-number">1</span>
+                            <div><strong>Behavioral Profiling</strong><p>Detects hidden patterns like repeated connections (beacons) and sudden traffic spikes indicating malicious activity.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">2</span>
+                            <div><strong>Domain & IP Intelligence</strong><p>Evaluates contacts against threat feeds, checking for DGA patterns and newly registered suspicious domains.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">3</span>
+                            <div><strong>Graph Relationship Mapping</strong><p>Builds a map of connections to uncover hidden links between disparate services and coordinated attacks.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">4</span>
+                            <div><strong>Anomaly Detection Layer</strong><p>Identifies deviations from normal browsing behavior and flags potential data exfiltration attempts.</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== WI-FI CHECK ========== -->
+        <section class="content-section" id="section-wifi-connections">
+            <div class="section-header">
+                <h1>📶 Wi-Fi Network Scanner</h1>
+                <p class="section-subtitle">Real-time device discovery — see every device connected to your Wi-Fi with names, IPs &amp; types</p>
+            </div>
+            <div class="tool-container" style="max-width:1100px;margin:0 auto;">
+
+                <!-- Network Info Bar -->
+                <div id="wifiNetworkBar" style="display:none;background:linear-gradient(135deg,rgba(14,165,233,.15),rgba(139,92,246,.15));border:1px solid rgba(14,165,233,.3);border-radius:16px;padding:1.25rem 1.75rem;margin-bottom:1.5rem;flex-wrap:wrap;gap:1.5rem;align-items:center;">
+                    <div style="display:flex;align-items:center;gap:.6rem;"><span style="font-size:1.5rem;">📶</span><div><div style="font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;">Network</div><div id="wifiSsidDisplay" style="font-size:1rem;font-weight:700;color:#e2e8f0;">—</div></div></div>
+                    <div style="display:flex;align-items:center;gap:.6rem;"><span style="font-size:1.3rem;">📡</span><div><div style="font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;">Signal</div><div id="wifiSignalDisplay" style="font-size:1rem;font-weight:700;color:#10b981;">—</div></div></div>
+                    <div style="display:flex;align-items:center;gap:.6rem;"><span style="font-size:1.3rem;">🌐</span><div><div style="font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;">My IP</div><div id="wifiMyIpDisplay" style="font-size:1rem;font-weight:700;color:#e2e8f0;font-family:monospace;">—</div></div></div>
+                    <div style="display:flex;align-items:center;gap:.6rem;"><span style="font-size:1.3rem;">⚡</span><div><div style="font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;">Speed</div><div id="wifiSpeedDisplay" style="font-size:1rem;font-weight:700;color:#e2e8f0;">—</div></div></div>
+                    <div style="margin-left:auto;"><span id="wifiDeviceCount" style="background:rgba(14,165,233,.2);border:1px solid rgba(14,165,233,.4);color:#38bdf8;padding:.4rem 1rem;border-radius:20px;font-size:.85rem;font-weight:700;">0 devices</span></div>
+                </div>
+                
+                <!-- Signal Analysis Graph (Premium Detail) -->
+                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:1.25rem;margin-bottom:1.5rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                        <div style="font-size:0.85rem;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Live Signal Spectrum</div>
+                        <div style="display:flex;align-items:center;gap:0.5rem;">
+                            <span style="width:8px;height:8px;background:#10b981;border-radius:50%;box-shadow:0 0 8px #10b981;"></span>
+                            <span style="font-size:0.75rem;color:#10b981;font-weight:700;">ACTIVE MONITOR</span>
+                        </div>
+                    </div>
+                    <canvas id="wifiGraphCanvas" width="1000" height="80" style="width:100%;height:80px;border-radius:8px;"></canvas>
+                </div>
+
+                <!-- Controls -->
+                <div style="display:flex;gap:1rem;margin-bottom:1.75rem;flex-wrap:wrap;">
+                    <button id="wifiScanBtn" onclick="startWifiScan(false)" style="display:flex;align-items:center;gap:.6rem;padding:.85rem 1.75rem;background:linear-gradient(135deg,#0ea5e9,#6366f1);border:none;border-radius:12px;color:#fff;font-weight:700;font-size:.95rem;cursor:pointer;box-shadow:0 4px 20px rgba(14,165,233,.4);">🔍 Scan Network</button>
+                    <button id="wifiRescanBtn" onclick="startWifiScan(true)" style="display:none;align-items:center;gap:.6rem;padding:.85rem 1.75rem;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:12px;color:#e2e8f0;font-weight:600;font-size:.95rem;cursor:pointer;">🔄 Re-Scan</button>
+                </div>
+
+                <!-- Progress -->
+                <div id="wifiScanStatus" style="display:none;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.2);border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1.5rem;">
+                    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:.75rem;">
+                        <div style="width:20px;height:20px;border:3px solid rgba(14,165,233,.3);border-top-color:#0ea5e9;border-radius:50%;animation:spin .8s linear infinite;"></div>
+                        <span id="wifiScanStatusText" style="color:#94a3b8;font-size:.9rem;">Initializing scan…</span>
+                    </div>
+                    <div style="background:rgba(0,0,0,.3);border-radius:6px;height:6px;overflow:hidden;"><div id="wifiScanProgress" style="height:100%;background:linear-gradient(90deg,#0ea5e9,#6366f1);border-radius:6px;width:0%;transition:width .5s ease;"></div></div>
+                </div>
+
+                <!-- Error -->
+                <div id="wifiScanError" style="display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1.5rem;color:#f87171;">
+                    <strong>⚠️ Scanner offline.</strong> Open a terminal <em>as Administrator</em> and run:<br>
+                    <code style="display:block;margin-top:.5rem;background:rgba(0,0,0,.4);padding:.5rem 1rem;border-radius:8px;color:#38bdf8;font-size:.9rem;">node wifi-api-server.js</code>
+                </div>
+
+                <!-- Results -->
+                <div id="wifiDevicesGrid" style="display:none;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
+                        <h3 style="margin:0;font-size:1.05rem;color:#e2e8f0;font-weight:700;">Connected Devices</h3>
+                        <span id="wifiScanTime" style="font-size:.78rem;color:#64748b;"></span>
+                    </div>
+                    <!-- This Device -->
+                    <div id="wifiThisDevice" style="background:linear-gradient(135deg,rgba(16,185,129,.12),rgba(6,182,212,.12));border:1px solid rgba(16,185,129,.3);border-radius:16px;padding:1.25rem 1.5rem;margin-bottom:1rem;display:flex;align-items:center;gap:1.25rem;">
+                        <div style="font-size:2.2rem;">💻</div>
+                        <div style="flex:1;">
+                            <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.2rem;">
+                                <span id="wifiThisDeviceName" style="font-size:1rem;font-weight:700;color:#e2e8f0;">This Device</span>
+                                <span style="background:rgba(16,185,129,.2);color:#10b981;font-size:.7rem;font-weight:700;padding:.15rem .5rem;border-radius:10px;border:1px solid rgba(16,185,129,.3);">YOU</span>
+                            </div>
+                            <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+                                <span id="wifiThisDeviceIp" style="font-family:monospace;font-size:.85rem;color:#38bdf8;"></span>
+                                <span id="wifiThisDeviceMac" style="font-family:monospace;font-size:.85rem;color:#64748b;"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Peer device cards -->
+                    <div id="wifiDeviceCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;"></div>
+                </div>
+
+                <!-- Empty -->
+                <div id="wifiEmptyState" style="text-align:center;padding:3rem 2rem;color:#64748b;">
+                    <div style="font-size:3.5rem;margin-bottom:1rem;opacity:.5;">📶</div>
+                    <p style="font-size:1rem;margin-bottom:.5rem;">Click <strong style="color:#0ea5e9;">Scan Network</strong> to discover all devices on your Wi-Fi.</p>
+                    <p style="font-size:.85rem;opacity:.7;">Ensure the background server is running: <code>node wifi-api-server.js</code></p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== LIVE GPS TRACKER ========== -->
+
+        <section class="content-section" id="section-live-gps-tracker">
+            <div class="section-header">
+                <h1>📡 Live GPS Location Tracker</h1>
+                <p class="section-subtitle">Accurately track your real-time location using your device's GPS sensor with live map, speed, heading, and route history</p>
+            </div>
+            <div class="tool-container gps-full-width">
+                <div class="input-card">
+                    <h2>Real-Time GPS Tracking</h2>
+                    <p class="input-desc">Uses your device's built-in GPS, Wi-Fi, and cell tower data for maximum accuracy. Grant location permission when prompted.</p>
+
+                    <!-- GPS Control Buttons -->
+                    <div class="gps-controls">
+                        <button class="btn-primary gps-start-btn" id="gpsStartBtn" onclick="startLiveGPS()">
+                            <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg></span>
+                            Start Live Tracking
+                        </button>
+                        <button class="btn-secondary gps-stop-btn hidden" id="gpsStopBtn" onclick="stopLiveGPS()">
+                            <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></span>
+                            Stop Tracking
+                        </button>
+                        <button class="btn-secondary gps-share-btn hidden" id="gpsWhatsAppBtn" onclick="shareLiveLocationWhatsApp()">
+                            <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-1.9 5.4A8.5 8.5 0 0 1 6.6 18L3 19l1.1-3.5A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.5 9.5c.2-.5.4-.5.6-.5h.5c.2 0 .4 0 .5.4.2.5.7 1.7.7 1.8.1.2.1.4 0 .6-.1.2-.2.3-.4.5-.1.1-.3.3-.4.4-.1.1-.2.2-.1.4.1.2.6 1 1.3 1.6.9.8 1.6 1 1.9 1.2.2.1.3.1.5 0 .1-.1.5-.6.7-.9.2-.3.3-.3.6-.2.2.1 1.5.7 1.7.8.2.1.4.2.4.3 0 .1 0 .8-.3 1.4-.3.6-1.5 1.1-2 1.1-.5 0-1 .1-3.2-.8-2.6-1-4.2-3.7-4.3-3.9-.1-.2-1.1-1.4-1.1-2.7 0-1.3.7-1.9.9-2.2Z"/></svg></span>
+                            Share on WhatsApp
+                        </button>
+                    </div>
+
+                    <!-- GPS Status Bar -->
+                    <div class="gps-status-bar" id="gpsStatusBar">
+                        <div class="gps-status-dot" id="gpsStatusDot"></div>
+                        <span id="gpsStatusText">Waiting to start...</span>
+                    </div>
+
+                    <!-- Live Stats Dashboard -->
+                    <div class="gps-live-stats hidden" id="gpsLiveStats">
+                        <div class="gps-stat-card">
+                            <div class="gps-stat-icon">📍</div>
+                            <div class="gps-stat-value" id="gpsLiveLat">—</div>
+                            <div class="gps-stat-label">Latitude</div>
+                        </div>
+                        <div class="gps-stat-card">
+                            <div class="gps-stat-icon">📍</div>
+                            <div class="gps-stat-value" id="gpsLiveLng">—</div>
+                            <div class="gps-stat-label">Longitude</div>
+                        </div>
+                        <div class="gps-stat-card">
+                            <div class="gps-stat-icon">🎯</div>
+                            <div class="gps-stat-value" id="gpsLiveAccuracy">—</div>
+                            <div class="gps-stat-label">Accuracy</div>
+                        </div>
+                        <div class="gps-stat-card">
+                            <div class="gps-stat-icon">⛰️</div>
+                            <div class="gps-stat-value" id="gpsLiveAltitude">—</div>
+                            <div class="gps-stat-label">Altitude</div>
+                        </div>
+                        <div class="gps-stat-card">
+                            <div class="gps-stat-icon">🏎️</div>
+                            <div class="gps-stat-value" id="gpsLiveSpeed">—</div>
+                            <div class="gps-stat-label">Speed</div>
+                        </div>
+                        <div class="gps-stat-card">
+                            <div class="gps-stat-icon">🧭</div>
+                            <div class="gps-stat-value" id="gpsLiveHeading">—</div>
+                            <div class="gps-stat-label">Heading</div>
+                        </div>
+                        <div class="gps-stat-card">
+                            <div class="gps-stat-icon">📏</div>
+                            <div class="gps-stat-value" id="gpsLiveDistance">0 m</div>
+                            <div class="gps-stat-label">Distance Traveled</div>
+                        </div>
+                        <div class="gps-stat-card">
+                            <div class="gps-stat-icon">🏛️</div>
+                            <div class="gps-stat-value" id="gpsLiveLandmark">—</div>
+                            <div class="gps-stat-label">Nearest Landmark</div>
+                        </div>
+                        <div class="gps-stat-card">
+                            <div class="gps-stat-icon">📊</div>
+                            <div class="gps-stat-value" id="gpsLiveVertAcc">—</div>
+                            <div class="gps-stat-label">Vert. Accuracy</div>
+                        </div>
+                        <div class="gps-stat-card">
+                            <div class="gps-stat-icon">🕐</div>
+                            <div class="gps-stat-value" id="gpsLiveTime">—</div>
+                            <div class="gps-stat-label">Last Updated</div>
+                        </div>
+                    </div>
+
+                    <!-- Live Map -->
+                    <div class="gps-map-wrap hidden" id="gpsMapWrap">
+                        <div id="gpsLiveMapContainer" class="gps-live-map-container"></div>
+                        <div class="gps-map-overlay">
+                            <div class="gps-signal-indicator" id="gpsSignalIndicator">
+                                <span class="gps-signal-bar"></span>
+                                <span class="gps-signal-bar"></span>
+                                <span class="gps-signal-bar"></span>
+                                <span class="gps-signal-bar"></span>
+                                <span class="gps-signal-label" id="gpsSignalLabel">GPS</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Address Display -->
+                    <div class="gps-address-card hidden" id="gpsAddressCard">
+                        <div class="gps-address-icon">🏠</div>
+                        <div class="gps-address-content">
+                            <div class="gps-address-label">Your Current Location</div>
+                            <div class="gps-address-text" id="gpsAddressText">Resolving address...</div>
+                            <div class="gps-address-subtext" id="gpsStreetText">Street: Resolving...</div>
+                            <div class="gps-address-subtext" id="gpsAreaText">Area: Resolving...</div>
+                            <div class="gps-address-subtext" id="gpsCoordsText">Coordinates: —</div>
+                            <div class="gps-address-subtext" id="gpsExactTimeText">Time: —</div>
+                        </div>
+                    </div>
+
+                    <div class="gps-address-card hidden" id="gpsSafetyCard">
+                        <div class="gps-address-icon">👮</div>
+                        <div class="gps-address-content">
+                            <div class="gps-address-label">Nearest Police Station</div>
+                            <div class="gps-address-text" id="gpsPoliceStationText">Searching nearby police station...</div>
+                            <div class="gps-address-subtext" id="gpsPoliceLocationText">Location: —</div>
+                            <div class="gps-address-subtext" id="gpsPoliceDistanceText">Distance: —</div>
+                            <a href="#" class="gps-nav-link hidden" id="gpsPoliceNavLink" target="_blank" rel="noopener noreferrer">Navigate from My Location</a>
+                        </div>
+                    </div>
+
+                    <!-- Route History -->
+                    <div class="gps-route-section hidden" id="gpsRouteSection">
+                        <div class="gps-route-header">
+                            <h3>📊 Route History</h3>
+                            <button class="btn-export" id="gpsExportBtn" onclick="exportGPSRoute()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                Export Route
+                            </button>
+                        </div>
+                        <div class="gps-route-stats">
+                            <div class="gps-route-stat">
+                                <span class="gps-route-stat-label">Points Recorded</span>
+                                <span class="gps-route-stat-value" id="gpsRoutePoints">0</span>
+                            </div>
+                            <div class="gps-route-stat">
+                                <span class="gps-route-stat-label">Duration</span>
+                                <span class="gps-route-stat-value" id="gpsRouteDuration">0:00</span>
+                            </div>
+                            <div class="gps-route-stat">
+                                <span class="gps-route-stat-label">Avg Speed</span>
+                                <span class="gps-route-stat-value" id="gpsRouteAvgSpeed">0 km/h</span>
+                            </div>
+                            <div class="gps-route-stat">
+                                <span class="gps-route-stat-label">Max Speed</span>
+                                <span class="gps-route-stat-value" id="gpsRouteMaxSpeed">0 km/h</span>
+                            </div>
+                        </div>
+                        <div class="gps-directions-card">
+                            <div class="gps-directions-title">Directions to Nearest Police Station</div>
+                            <div class="gps-directions-list" id="gpsDirectionsList">Start live tracking to load route directions.</div>
+                        </div>
+                    </div>
+
+                    <!-- Info Tips -->
+                    <div class="tips-section">
+                        <h3 class="tips-title">📡 How Live GPS Tracking Works</h3>
+                        <div class="tip-item">
+                            <span class="tip-number">1</span>
+                            <div><strong>High-Accuracy GPS</strong><p>Uses your device's hardware GPS sensor with <code>enableHighAccuracy</code> for best precision (within 3-10 meters).</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">2</span>
+                            <div><strong>Continuous Tracking</strong><p>Updates position in real-time using <code>watchPosition</code> API — every movement is instantly reflected on the map.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">3</span>
+                            <div><strong>Route Trail</strong><p>Records your movement path as a polyline on the map with a glowing trail effect.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">4</span>
+                            <div><strong>Speed & Heading</strong><p>Displays real-time speed (km/h), compass heading, altitude, and total distance traveled.</p></div>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-number">5</span>
+                            <div><strong>Privacy First</strong><p>All tracking happens locally in your browser. No data is sent to any server — your location stays with you.</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== EMERGENCY RESPONSE ========== -->
+        <section class="content-section" id="section-emergency-response">
+            <div class="section-header emergency-header">
+                <h1>🚨 Emergency Response Mode</h1>
+                <p class="section-subtitle">Immediate recovery steps if you've been hacked or compromised</p>
+            </div>
+            <div class="tool-container">
+                <div class="input-card emergency-input-card">
+                    <h2>What happened?</h2>
+                    <p class="input-desc">Select the type of incident to get immediate recovery instructions</p>
+                    <div class="incident-grid">
+                        <button class="incident-btn" onclick="handleEmergency('account-hacked')">
+                            <span class="incident-icon">🔓</span>
+                            <span class="incident-label">Account Hacked</span>
+                        </button>
+                        <button class="incident-btn" onclick="handleEmergency('identity-theft')">
+                            <span class="incident-icon">🪪</span>
+                            <span class="incident-label">Identity Theft</span>
+                        </button>
+                        <button class="incident-btn" onclick="handleEmergency('ransomware')">
+                            <span class="incident-icon">💀</span>
+                            <span class="incident-label">Ransomware</span>
+                        </button>
+                        <button class="incident-btn" onclick="handleEmergency('data-breach')">
+                            <span class="incident-icon">📂</span>
+                            <span class="incident-label">Data Breach</span>
+                        </button>
+                        <button class="incident-btn" onclick="handleEmergency('phishing-clicked')">
+                            <span class="incident-icon">🎣</span>
+                            <span class="incident-label">Clicked Phishing Link</span>
+                        </button>
+                        <button class="incident-btn" onclick="handleEmergency('financial-fraud')">
+                            <span class="incident-icon">💳</span>
+                            <span class="incident-label">Financial Fraud</span>
+                        </button>
+                        <button class="incident-btn" onclick="handleEmergency('device-compromised')">
+                            <span class="incident-icon">💻</span>
+                            <span class="incident-label">Device Compromised</span>
+                        </button>
+                        <button class="incident-btn" onclick="handleEmergency('social-engineering')">
+                            <span class="incident-icon">🎭</span>
+                            <span class="incident-label">Social Engineering</span>
+                        </button>
+                    </div>
+
+                    <!-- Register Complaint Section -->
+                    <div class="complaint-register-card">
+                        <div class="complaint-header">
+                            <span class="complaint-badge">🇮🇳 GOVERNMENT OF INDIA</span>
+                            <h3>Register a Cyber Fraud Complaint</h3>
+                            <p>File an official complaint on the National Cyber Crime Reporting Portal</p>
+                        </div>
+                        <div class="complaint-features">
+                            <div class="complaint-feature">
+                                <span>💳</span>
+                                <span>Financial Fraud</span>
+                            </div>
+                            <div class="complaint-feature">
+                                <span>🎣</span>
+                                <span>Phishing / Vishing</span>
+                            </div>
+                            <div class="complaint-feature">
+                                <span>🪪</span>
+                                <span>Identity Theft</span>
+                            </div>
+                            <div class="complaint-feature">
+                                <span>💻</span>
+                                <span>Hacking</span>
+                            </div>
+                            <div class="complaint-feature">
+                                <span>📱</span>
+                                <span>Social Media Crime</span>
+                            </div>
+                            <div class="complaint-feature">
+                                <span>🔒</span>
+                                <span>Ransomware</span>
+                            </div>
+                        </div>
+                        <div class="complaint-actions">
+                            <a href="https://cybercrime.gov.in/Webform/Accept.aspx" target="_blank" rel="noopener noreferrer" class="btn-complaint" id="registerComplaintBtn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                                Register Complaint on cybercrime.gov.in
+                            </a>
+                            <a href="tel:1930" class="btn-complaint" id="callCyberCrimeBtn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.86 19.86 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.63 2.62a2 2 0 0 1-.45 2.11L8 9.91a16 16 0 0 0 6.09 6.09l1.46-1.29a2 2 0 0 1 2.11-.45c.84.3 1.72.51 2.62.63A2 2 0 0 1 22 16.92Z"/></svg>
+                                Call Cyber Crime Helpline 1930
+                            </a>
+                        </div>
+                        <div class="complaint-helpline">
+                            <span>📞 Cyber Crime Helpline: <strong>1930</strong></span>
+                            <span class="complaint-divider">|</span>
+                            <span>🚔 Police Emergency: <strong>100</strong></span>
+                            <span class="complaint-divider">|</span>
+                            <span>👩 Women Helpline: <strong>181</strong></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="results-card hidden" id="emergencyResults">
+                    <div class="results-header emergency-results-header">
+                        <h2>🚨 Recovery Plan</h2>
+                    </div>
+                    <div class="results-body" id="emergencyResultsBody"></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Scan Overlay -->
+    <div class="scan-overlay hidden" id="scanOverlay">
+        <div class="scan-content">
+            <div class="scan-spinner">
+                <div class="spinner-ring"></div>
+                <div class="spinner-ring"></div>
+                <div class="spinner-ring"></div>
+            </div>
+            <p class="scan-text" id="scanText">Analyzing...</p>
+            <div class="scan-progress">
+                <div class="scan-progress-bar" id="scanProgressBar"></div>
+            </div>
+        </div>
+    </div>
+
+    <button class="ai-chatbot-toggle" id="aiChatbotToggle" aria-label="Open Shield Box AI assistant">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
+        <span>Shield Box AI</span>
+    </button>
+
+    <div class="ai-chatbot hidden" id="aiChatbot">
+        <div class="ai-chatbot-bg-logo" aria-hidden="true">
+            <svg viewBox="0 0 900 900" fill="none">
+                <defs>
+                    <linearGradient id="chatbotShieldStroke" x1="220" y1="170" x2="690" y2="735" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#dffcff"/>
+                        <stop offset="0.45" stop-color="#56dfff"/>
+                        <stop offset="1" stop-color="#8d73ff"/>
+                    </linearGradient>
+                    <linearGradient id="chatbotShieldFill" x1="255" y1="190" x2="655" y2="690" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#0ff6ff" stop-opacity="0.18"/>
+                        <stop offset="0.45" stop-color="#0f8bff" stop-opacity="0.1"/>
+                        <stop offset="1" stop-color="#632bff" stop-opacity="0.14"/>
+                    </linearGradient>
+                </defs>
+                <path d="M450 86 182 210v223c0 180 113 349 268 399 155-50 268-219 268-399V210L450 86Z" fill="url(#chatbotShieldFill)" stroke="url(#chatbotShieldStroke)" stroke-width="18"/>
+                <path d="M450 168 262 258v171c0 132 81 256 188 295 107-39 188-163 188-295V258L450 168Z" stroke="url(#chatbotShieldStroke)" stroke-width="12" opacity="0.8"/>
+                <path d="M367 560 450 438 533 560" stroke="#e9fbff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+                <path d="M450 320v134" stroke="#e9fbff" stroke-width="24" stroke-linecap="round" opacity="0.9"/>
+            </svg>
+        </div>
+        <div class="ai-chatbot-header">
+            <div>
+                <h3>Shield Box AI</h3>
+            </div>
+            <button class="ai-chatbot-close" id="aiChatbotClose" aria-label="Close Shield Box AI">&times;</button>
+        </div>
+        <div class="ai-chatbot-messages" id="aiChatbotMessages">
+            <div class="ai-chatbot-message bot">
+                <div class="ai-chatbot-bubble">Hi, welcome to Shield Box AI. Ask me anything.</div>
+            </div>
+        </div>
+        <form class="ai-chatbot-form" id="aiChatbotForm">
+            <input type="text" id="aiChatbotInput" class="input-field" placeholder="Ask Shield Box AI..." autocomplete="off">
+            <button type="submit" class="btn-primary">Send</button>
+        </form>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
