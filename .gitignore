@@ -16,7 +16,6 @@ scratch/*.out
 scratch/*.err
 scratch/.netlify/
 .netlify/
-portfolio/.netlify/
 
 installation_id
 
