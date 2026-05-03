@@ -2,6 +2,8 @@
 
 Advanced Digital Intelligence & Cybersecurity Suite.
 
+**Live Demo**: [https://cybershieldssit.netlify.app](https://cybershieldssit.netlify.app)
+
 ## Overview
 Cyber Shield AI is an all-in-one browser-based security command center designed for threat detection, network analysis, and emergency response.
 
