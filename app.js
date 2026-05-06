@@ -703,6 +703,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderPasswordManager();
     initializeFileScanner();
     initializeNetworkMonitoring();
+    configureWifiScannerUi();
     initializeChatbot();
 
     // Initialize visualization graphs last so they don't block navigation if they fail
@@ -8646,7 +8647,9 @@ function handleEmergency(type) {
 const NETWORK_MONITOR_INTERVAL = 2500;
 const NETWORK_REAL_IP_REFRESH_MS = 120000;
 const NETWORK_WIFI_REFRESH_MS = 15000;
-const NETWORK_WIFI_API_BASE = 'http://127.0.0.1:4318';
+const NETWORK_WIFI_API_BASE = (window.location.protocol !== 'file:' && ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname))
+    ? ''
+    : 'http://127.0.0.1:4318';
 const NETWORK_WEBSOCKET_ENDPOINTS = [
     'wss://echo.websocket.events',
     'wss://ws.ifelse.io'
@@ -8937,6 +8940,13 @@ async function loadWifiDeviceSnapshot(forceRefresh) {
         return scan;
     }
 
+    if (!canUseNativeWifiScanner()) {
+        const hostedSnapshot = getHostedWifiSnapshot();
+        Object.assign(scan, hostedSnapshot);
+        renderNetworkWifiChecks();
+        return scan;
+    }
+
     scan.loading = true;
     renderNetworkWifiChecks();
 
@@ -9183,8 +9193,81 @@ function buildWifiDetailItems(scan) {
 // ═══════════════════════════════════════════════════════════════
 //  WI-FI NETWORK SCANNER
 // ═══════════════════════════════════════════════════════════════
-const WIFI_API = 'http://127.0.0.1:4318';
+const WIFI_API = (window.location.protocol !== 'file:' && ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname))
+    ? ''
+    : 'http://127.0.0.1:4318';
 let wifiScanInProgress = false;
+
+function isLoopbackHostname(hostname) {
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+function canUseNativeWifiScanner() {
+    if (window.location.protocol === 'file:') return true;
+    return isLoopbackHostname(window.location.hostname);
+}
+
+function getHostedWifiSnapshot() {
+    const link = getNetworkLinkDetails();
+    const exitInfo = networkState.realExitInfo || {};
+
+    return {
+        available: false,
+        hostedMode: true,
+        loading: false,
+        lastLoadedAt: Date.now(),
+        lastError: '',
+        network: {
+            ssid: link.rawType === 'wifi' ? 'Current Wi-Fi link' : 'Browser network view',
+            signal: link.meta || 'Browser connection hints only',
+            myIp: exitInfo.ip || 'Hidden by browser',
+            receiveRate: link.downlink || null,
+            transmitRate: null,
+            authentication: window.isSecureContext ? 'HTTPS-secured session' : 'Non-secure session',
+            dnsServers: [],
+            gateway: 'Hidden by browser',
+            defaultGateway: 'Hidden by browser',
+            source: 'browser'
+        },
+        thisDevice: {
+            name: 'This browser session',
+            ip: exitInfo.ip || '',
+            mac: 'Hidden by browser'
+        },
+        devices: [],
+        totalFound: 0,
+        scanTechniques: [
+            'Browser Network Information API',
+            'Public edge lookup',
+            'Secure-context checks'
+        ],
+        scannedAt: new Date().toISOString()
+    };
+}
+
+function configureWifiScannerUi() {
+    if (canUseNativeWifiScanner()) return;
+
+    const scanBtn = document.getElementById('wifiScanBtn');
+    const rescanBtn = document.getElementById('wifiRescanBtn');
+    const emptyState = document.getElementById('wifiEmptyState');
+    const errorBox = document.getElementById('wifiScanError');
+    const subtitle = document.querySelector('#section-wifi-connections .section-subtitle');
+    const dashStatus = document.getElementById('dashWifiStatus');
+
+    if (scanBtn) scanBtn.textContent = 'Run Browser Check';
+    if (rescanBtn) rescanBtn.textContent = 'Refresh Browser Check';
+    if (subtitle) subtitle.textContent = 'Hosted-safe wireless diagnostics using browser telemetry, public edge data, and secure-context checks';
+    if (emptyState) {
+        emptyState.innerHTML = '<div style="font-size:3.5rem;margin-bottom:1rem;opacity:.5;">📶</div><p style="font-size:1rem;margin-bottom:.5rem;">Run a <strong style="color:#0ea5e9;">Browser Check</strong> to inspect the active connection, public IP, and Wi-Fi security hints available to the browser.</p><p style="font-size:.85rem;opacity:.7;">Hosted sites cannot read your router ARP table or enumerate devices on your local LAN.</p>';
+    }
+    if (errorBox) {
+        errorBox.innerHTML = '<strong>Browser-only mode.</strong> This hosted page can analyze connection hints and edge exposure, but LAN device discovery only works in a local desktop run because browsers do not expose router neighbor tables.';
+    }
+    if (dashStatus) {
+        dashStatus.textContent = 'Hosted browser check available';
+    }
+}
 
 function setWifiProgress(pct, msg) {
     const bar = document.getElementById('wifiScanProgress');
@@ -9202,15 +9285,45 @@ function hideEl(id) {
     if (el) el.style.display = 'none';
 }
 
-function setWifiScanError(message) {
+function setWifiScanError(isServerOffline, message) {
     const el = document.getElementById('wifiScanError');
     if (!el) return;
-    const detail = message || 'The local Wi-Fi scanner could not complete the scan.';
-    el.innerHTML = `
-        <strong>Scanner issue.</strong> ${escapeHtml(detail)}<br>
-        <span style="display:block;margin-top:.35rem;color:#fca5a5;">Make sure the local scanner is running, then try Re-Scan.</span>
-        <code style="display:block;margin-top:.5rem;background:rgba(0,0,0,.4);padding:.5rem 1rem;border-radius:8px;color:#38bdf8;font-size:.9rem;">node wifi-api-server.js</code>
-    `;
+    if (!canUseNativeWifiScanner()) {
+        el.innerHTML = `
+            <div style="display:flex;align-items:flex-start;gap:.9rem;">
+                <span style="font-size:2rem;line-height:1;">🌐</span>
+                <div>
+                    <strong style="font-size:1rem;color:#f87171;">Hosted Browser Mode</strong>
+                    <p style="margin:.4rem 0 .6rem;color:#fca5a5;font-size:.9rem;">${escapeHtml(message || 'Direct LAN device discovery is unavailable from the hosted site.')}</p>
+                    <p style="margin:0;color:#94a3b8;font-size:.82rem;">Browsers do not expose your local router ARP table, DHCP leases, or neighboring device list to Netlify-hosted pages.</p>
+                </div>
+            </div>`;
+        return;
+    }
+    if (isServerOffline) {
+        el.innerHTML = `
+            <div style="display:flex;align-items:flex-start;gap:.9rem;">
+                <span style="font-size:2rem;line-height:1;">🔌</span>
+                <div>
+                    <strong style="font-size:1rem;color:#f87171;">Local Scanner Not Running</strong>
+                    <p style="margin:.4rem 0 .75rem;color:#fca5a5;font-size:.9rem;">The Wi-Fi scanner service is offline. Open a terminal <em>in the project folder</em> and run:</p>
+                    <code style="display:block;background:rgba(0,0,0,.5);padding:.6rem 1rem;border-radius:8px;color:#38bdf8;font-size:.92rem;letter-spacing:.02em;">node wifi-api-server.js</code>
+                    <p style="margin:.75rem 0 0;color:#94a3b8;font-size:.82rem;">Or double-click <strong>start_cybershield.bat</strong> to launch everything automatically. Then click <strong>Re-Scan</strong>.</p>
+                </div>
+            </div>`;
+    } else {
+        const detail = message || 'The local Wi-Fi scanner could not complete the scan.';
+        el.innerHTML = `
+            <div style="display:flex;align-items:flex-start;gap:.9rem;">
+                <span style="font-size:2rem;line-height:1;">⚠️</span>
+                <div>
+                    <strong style="font-size:1rem;color:#f87171;">Scanner Issue</strong>
+                    <p style="margin:.4rem 0 .6rem;color:#fca5a5;font-size:.9rem;">${escapeHtml(detail)}</p>
+                    <p style="margin:0;color:#94a3b8;font-size:.82rem;">Make sure the local scanner is running, then try Re-Scan:</p>
+                    <code style="display:block;margin-top:.4rem;background:rgba(0,0,0,.5);padding:.5rem 1rem;border-radius:8px;color:#38bdf8;font-size:.9rem;">node wifi-api-server.js</code>
+                </div>
+            </div>`;
+    }
 }
 
 async function startWifiScan(forceRefresh) {
@@ -9227,9 +9340,23 @@ async function startWifiScan(forceRefresh) {
     const btn = document.getElementById('wifiScanBtn');
     if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
 
-    setWifiProgress(5, 'Connecting to scanner…');
+    setWifiProgress(5, canUseNativeWifiScanner() ? 'Connecting to scanner…' : 'Collecting browser network telemetry...');
 
     try {
+        if (!canUseNativeWifiScanner()) {
+            setWifiProgress(25, 'Inspecting browser connection hints...');
+            await new Promise(r => setTimeout(r, 250));
+            await loadRealExitInfo(forceRefresh);
+            setWifiProgress(55, 'Refreshing hosted network snapshot...');
+            await new Promise(r => setTimeout(r, 250));
+            const data = getHostedWifiSnapshot();
+            Object.assign(networkState.wifiScan, data);
+            setWifiProgress(100, 'Browser network view updated');
+            await new Promise(r => setTimeout(r, 220));
+            renderHostedWifiResults(data);
+            return;
+        }
+
         // Step 1: Check API health
         setWifiProgress(10, 'Checking scanner service…');
         const health = await fetch(`${WIFI_API}/health`, { signal: AbortSignal.timeout(3000) });
@@ -9261,7 +9388,17 @@ async function startWifiScan(forceRefresh) {
 
     } catch (err) {
         hideEl('wifiScanStatus');
-        setWifiScanError(err && err.message ? err.message : 'Wi-Fi scan failed');
+        // Categorize the error for a helpful message
+        const isNetworkError = !err ||
+            err.message === 'Failed to fetch' ||
+            err.message === 'API offline' ||
+            err.message === 'Load failed' ||
+            err.name === 'TypeError';
+        const isTimeout = err && (err.name === 'TimeoutError' || err.name === 'AbortError' || (err.message && err.message.toLowerCase().includes('timeout')));
+        let friendlyMsg = null;
+        if (isTimeout) friendlyMsg = 'Connection timed out — the scanner may still be starting. Try Re-Scan in a moment.';
+        else if (!isNetworkError) friendlyMsg = err && err.message ? err.message : 'Wi-Fi scan failed';
+        setWifiScanError(isNetworkError && !isTimeout, friendlyMsg);
         showEl('wifiScanError', 'block');
         showEl('wifiEmptyState', 'block');
     } finally {
@@ -9270,6 +9407,78 @@ async function startWifiScan(forceRefresh) {
         if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
         showEl('wifiRescanBtn', 'flex');
     }
+}
+
+function renderHostedWifiResults(data) {
+    const network = data.network || {};
+    const link = getNetworkLinkDetails();
+    const exitInfo = networkState.realExitInfo || {};
+    const setT = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val || '-';
+    };
+
+    setT('wifiSsidDisplay', network.ssid || 'Browser network view');
+    setT('wifiSignalDisplay', network.signal || link.meta || 'Browser hints only');
+    setT('wifiMyIpDisplay', network.myIp || exitInfo.ip || 'Hidden by browser');
+    setT('wifiSpeedDisplay', link.downlink !== null ? `${link.downlink.toFixed(1)} Mbps` : 'Browser-hidden');
+    setT('wifiDeviceCount', 'LAN devices hidden');
+
+    const bar = document.getElementById('wifiNetworkBar');
+    if (bar) bar.style.display = 'flex';
+
+    setT('wifiThisDeviceName', 'This browser session');
+    setT('wifiThisDeviceIp', exitInfo.ip || '');
+    setT('wifiThisDeviceMac', 'MAC hidden by browser');
+
+    const timeEl = document.getElementById('wifiScanTime');
+    if (timeEl) {
+        const sourceBits = [];
+        if (link.label) sourceBits.push(link.label);
+        if (exitInfo.location) sourceBits.push(exitInfo.location);
+        timeEl.textContent = `Updated at ${new Date().toLocaleTimeString()} - ${sourceBits.join(' - ') || 'Hosted browser telemetry'}`;
+    }
+
+    const container = document.getElementById('wifiDeviceCards');
+    if (container) {
+        container.innerHTML = `
+            <div style="grid-column:1/-1;background:linear-gradient(135deg,rgba(14,165,233,.12),rgba(99,102,241,.12));border:1px solid rgba(56,189,248,.22);border-radius:16px;padding:1.3rem 1.4rem;">
+                <div style="display:flex;align-items:flex-start;gap:1rem;">
+                    <div style="font-size:1.8rem;line-height:1;">🌐</div>
+                    <div>
+                        <div style="font-size:1rem;font-weight:700;color:#e2e8f0;margin-bottom:.45rem;">Hosted browser check completed</div>
+                        <p style="margin:0 0 .75rem;color:#cbd5e1;font-size:.92rem;line-height:1.55;">This Netlify-hosted page can inspect browser-visible link quality, secure-context state, public egress IP, and network health hints. It cannot read your home router's ARP table or enumerate neighboring devices on the LAN.</p>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.85rem;">
+                            <div style="background:rgba(15,23,42,.38);border:1px solid rgba(148,163,184,.16);border-radius:12px;padding:.85rem 1rem;">
+                                <div style="font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;">Connection profile</div>
+                                <div style="margin-top:.35rem;color:#e2e8f0;font-weight:700;">${escapeHtml(link.label || 'Adaptive link')}</div>
+                                <div style="margin-top:.2rem;color:#94a3b8;font-size:.82rem;">${escapeHtml(link.meta || 'No browser metrics exposed')}</div>
+                            </div>
+                            <div style="background:rgba(15,23,42,.38);border:1px solid rgba(148,163,184,.16);border-radius:12px;padding:.85rem 1rem;">
+                                <div style="font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;">Public edge</div>
+                                <div style="margin-top:.35rem;color:#e2e8f0;font-weight:700;">${escapeHtml(exitInfo.ip || 'Unavailable')}</div>
+                                <div style="margin-top:.2rem;color:#94a3b8;font-size:.82rem;">${escapeHtml(exitInfo.org || exitInfo.location || 'Public IP lookup')}</div>
+                            </div>
+                            <div style="background:rgba(15,23,42,.38);border:1px solid rgba(148,163,184,.16);border-radius:12px;padding:.85rem 1rem;">
+                                <div style="font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;">Router visibility</div>
+                                <div style="margin-top:.35rem;color:#e2e8f0;font-weight:700;">Blocked by browser</div>
+                                <div style="margin-top:.2rem;color:#94a3b8;font-size:.82rem;">LAN peers, MACs, and DHCP leases are not exposed to hosted pages.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    showEl('wifiDevicesGrid', 'block');
+    hideEl('wifiEmptyState');
+    hideEl('wifiScanError');
+    updateWifiGraphNodes([]);
+
+    const dashStatus = document.getElementById('dashWifiStatus');
+    const dashCount = document.getElementById('dashWifiCount');
+    if (dashStatus) dashStatus.textContent = 'Hosted browser check active';
+    if (dashCount) dashCount.style.display = 'none';
 }
 
 function renderWifiResults(data) {
@@ -9400,6 +9609,15 @@ function initWifiSignalWaveGraph() {
 
 // Background refresh for dashboard card stats
 async function refreshWifiDashboard() {
+    if (!canUseNativeWifiScanner()) {
+        const dashStatus = document.getElementById('dashWifiStatus');
+        const dashCount = document.getElementById('dashWifiCount');
+        const link = getNetworkLinkDetails();
+        if (dashStatus) dashStatus.textContent = `Browser check: ${link.label || 'Adaptive link'}`;
+        if (dashCount) dashCount.style.display = 'none';
+        return;
+    }
+
     try {
         const resp = await fetch(`${WIFI_API}/api/wifi/devices`, { signal: AbortSignal.timeout(5000) });
         if (resp.ok) {
@@ -9469,7 +9687,9 @@ function renderNetworkWifiChecks() {
 
     // 5. Render Device Behavioral Profiles
     if (dom.wifiDevicesList) {
-        if (!scan.available) {
+        if (!scan.available && scan.hostedMode) {
+            dom.wifiDevicesList.innerHTML = '<div class="network-empty-state">Hosted mode exposes browser-level network hints only. Local LAN peers, router ARP entries, and device MAC addresses are hidden by the browser security model.</div>';
+        } else if (!scan.available) {
             dom.wifiDevicesList.innerHTML = '<div class="network-empty-state">Local device discovery unavailable. Start `wifi-api-server.js` for advanced profiling.</div>';
         } else if (devices.length === 0) {
             dom.wifiDevicesList.innerHTML = '<div class="network-empty-state">No other peers discovered on the current network segments.</div>';

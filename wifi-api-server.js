@@ -796,13 +796,16 @@ async function fullScan(forceRefresh) {
 }
 
 // ─── HTTP Server ───────────────────────────────────────────────────────────
-const server = http.createServer(async (req, res) => {
+async function handleWifiApiRequest(req, res, options = {}) {
+    const host = options.host || HOST;
+    const port = Number(options.port || PORT);
+
     if (req.method === 'OPTIONS') { sendJson(res, 204, {}); return; }
 
-    const url = new URL(req.url || '/', `http://${HOST}:${PORT}`);
+    const url = new URL(req.url || '/', `http://${host}:${port}`);
 
     if (req.method === 'GET' && url.pathname === '/health') {
-        sendJson(res, 200, { ok: true, service: 'wifi-api-server', port: PORT, version: '3.0-accurate' });
+        sendJson(res, 200, { ok: true, service: 'wifi-api-server', port, version: '3.0-accurate' });
         return;
     }
 
@@ -819,9 +822,31 @@ const server = http.createServer(async (req, res) => {
     }
 
     sendJson(res, 404, { ok: false, error: 'Not found' });
-});
+}
 
-server.listen(PORT, HOST, () => {
-    console.log(`[CyberShield Wi-Fi API v3] http://${HOST}:${PORT}`);
-    console.log(`[Accurate] Only scans primary adapter's subnet — no DNS cache, no netstat.`);
-});
+function createWifiApiServer(options = {}) {
+    const host = options.host || HOST;
+    const port = Number(options.port || PORT);
+    return http.createServer((req, res) => handleWifiApiRequest(req, res, { host, port }));
+}
+
+function startWifiApiServer(options = {}) {
+    const host = options.host || HOST;
+    const port = Number(options.port || PORT);
+    const server = createWifiApiServer({ host, port });
+    server.listen(port, host, () => {
+        console.log(`[CyberShield Wi-Fi API v3] http://${host}:${port}`);
+        console.log(`[Accurate] Only scans primary adapter's subnet — no DNS cache, no netstat.`);
+    });
+    return server;
+}
+
+module.exports = {
+    createWifiApiServer,
+    handleWifiApiRequest,
+    startWifiApiServer
+};
+
+if (require.main === module) {
+    startWifiApiServer();
+}

@@ -17,11 +17,16 @@ Cyber Shield AI is an all-in-one browser-based security command center designed 
 
 ## Installation & Setup
 1. Clone the repository.
-2. Open `index.html` in any modern browser.
-3. For the **Network Scanner**, start the API server (requires Node.js):
+2. For the best local experience, start the integrated local server (requires Node.js):
    ```bash
-   node wifi-api-server.js
+   node server.js
    ```
+3. Open `http://127.0.0.1:4318` in your browser.
+4. The **Wi-Fi Scanner** will now use the integrated local API and can show connected device names, IPs, MACs, and inferred device types while scanning your network.
+
+## Wi-Fi Scanner Notes
+- The Wi-Fi scanner works fully only when the app is running locally through `server.js` or `start_cybershield.bat`.
+- The hosted Netlify site cannot enumerate devices on your home Wi-Fi because browsers do not expose LAN neighbor tables to public websites.
 
 ## License
 MIT License. See [LICENSING.md](LICENSING.md) for details.

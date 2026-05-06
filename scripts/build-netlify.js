@@ -1,15 +1,27 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
-const root = path.resolve(__dirname, '..');
-const dist = path.join(root, 'dist');
-const files = ['index.html', 'style.css', 'app.js'];
+const rootDir = path.resolve(__dirname, '..');
+const distDir = path.join(rootDir, 'dist');
 
-fs.rmSync(dist, { recursive: true, force: true });
-fs.mkdirSync(dist, { recursive: true });
+const filesToCopy = [
+  'index.html',
+  'style.css',
+  'app.js',
+];
 
-for (const file of files) {
-  fs.copyFileSync(path.join(root, file), path.join(dist, file));
+fs.rmSync(distDir, { recursive: true, force: true });
+fs.mkdirSync(distDir, { recursive: true });
+
+for (const relativePath of filesToCopy) {
+  const sourcePath = path.join(rootDir, relativePath);
+  const targetPath = path.join(distDir, relativePath);
+
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`Missing required file for Netlify build: ${relativePath}`);
+  }
+
+  fs.copyFileSync(sourcePath, targetPath);
 }
 
-console.log(`Prepared ${files.length} Cyber Shield AI files in ${path.relative(root, dist)}`);
+console.log(`Prepared Netlify publish directory at ${distDir}`);
