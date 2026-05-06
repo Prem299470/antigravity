@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="auth-locked">
     <!-- Animated Background -->
     <div class="bg-grid"></div>
 
@@ -42,6 +42,63 @@
             <path d="M450 320v134" stroke="#e9fbff" stroke-width="24" stroke-linecap="round" opacity="0.9"/>
         </svg>
     </div>
+
+    <!-- Authentication -->
+    <section class="auth-screen" id="authScreen" aria-label="Account access">
+        <div class="auth-panel">
+            <div class="auth-brand">
+                <div class="auth-logo">
+                    <svg viewBox="0 0 40 40" fill="none">
+                        <path d="M20 2.8 7 8.9v10.6c0 8.7 5.49 16.83 13 19.28 7.51-2.45 13-10.58 13-19.28V8.9L20 2.8Z" fill="url(#authLogoShell)" stroke="url(#authLogoEdge)" stroke-width="2.1"/>
+                        <path d="M20 9.8 14.9 12.4v4.55c0 3.85 2.16 7.47 5.1 8.92 2.94-1.45 5.1-5.07 5.1-8.92V12.4L20 9.8Z" fill="url(#authLogoCore)" stroke="url(#authLogoEdge)" stroke-width="1.2"/>
+                        <path d="M16.2 24.2 20 18.6 23.8 24.2" stroke="#e9fbff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M20 13.2v6.2" stroke="#e9fbff" stroke-width="1.7" stroke-linecap="round"/>
+                        <defs>
+                            <linearGradient id="authLogoShell" x1="9" y1="4" x2="31" y2="36" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#0ff6ff"/><stop offset="0.45" stop-color="#0f8bff"/><stop offset="1" stop-color="#632bff"/>
+                            </linearGradient>
+                            <linearGradient id="authLogoCore" x1="16" y1="11" x2="25" y2="25" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#8af9ff"/><stop offset="0.45" stop-color="#2bc3ff"/><stop offset="1" stop-color="#7b5cff"/>
+                            </linearGradient>
+                            <linearGradient id="authLogoEdge" x1="10" y1="5" x2="30" y2="35" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#dffcff"/><stop offset="0.4" stop-color="#56dfff"/><stop offset="1" stop-color="#8d73ff"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <div>
+                    <p class="auth-kicker">Secure Access</p>
+                    <h1>Cyber Shield <span class="logo-ai">AI</span></h1>
+                </div>
+            </div>
+
+            <div class="auth-tabs" role="tablist" aria-label="Login or sign up">
+                <button class="auth-tab active" type="button" id="authLoginTab" data-auth-mode="login">Login</button>
+                <button class="auth-tab" type="button" id="authSignupTab" data-auth-mode="signup">Sign Up</button>
+            </div>
+
+            <form class="auth-form" id="authForm">
+                <div class="form-group auth-name-group hidden" id="authNameGroup">
+                    <label for="authName">Full Name</label>
+                    <input type="text" id="authName" autocomplete="name" placeholder="Your name">
+                </div>
+                <div class="form-group">
+                    <label for="authEmail">Email Address</label>
+                    <input type="email" id="authEmail" autocomplete="email" placeholder="you@example.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="authPassword">Password</label>
+                    <input type="password" id="authPassword" autocomplete="current-password" placeholder="Enter password" minlength="6" required>
+                </div>
+                <div class="form-group auth-confirm-group hidden" id="authConfirmGroup">
+                    <label for="authConfirmPassword">Confirm Password</label>
+                    <input type="password" id="authConfirmPassword" autocomplete="new-password" placeholder="Repeat password" minlength="6">
+                </div>
+                <p class="auth-message" id="authMessage" role="status" aria-live="polite"></p>
+                <button class="btn-primary auth-submit" type="submit" id="authSubmitBtn">Login</button>
+            </form>
+        </div>
+    </section>
 
     <!-- Sidebar Navigation -->
     <nav class="sidebar" id="sidebar">
@@ -179,7 +236,7 @@
                     <span class="nav-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><line x1="17" y1="3" x2="20" y2="6"/><line x1="20" y1="3" x2="17" y2="6"/></svg>
                     </span>
-                    <span class="nav-text">Fake Profile Detector</span>
+                    <span class="nav-text">Fake Social Media Profile Detector</span>
                     <span class="new-badge">AI</span>
                 </a>
             </li>
@@ -195,6 +252,13 @@
         </ul>
 
         <div class="sidebar-footer">
+            <div class="auth-user-panel" id="authUserPanel">
+                <div>
+                    <span class="auth-user-label">Signed in as</span>
+                    <strong id="authUserName">User</strong>
+                </div>
+                <button type="button" class="auth-logout-btn" id="authLogoutBtn">Logout</button>
+            </div>
             <div class="status-indicator">
                 <span class="status-dot"></span>
                 <span class="status-text">AI Engine Active</span>
@@ -318,7 +382,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><line x1="17" y1="3" x2="20" y2="6"/><line x1="20" y1="3" x2="17" y2="6"/></svg>
                     </div>
                     <div class="stat-info">
-                        <h3>Fake Profile Detector</h3>
+                        <h3>Fake Social Media Profile Detector</h3>
                         <p>Detect AI-generated &amp; fake social media profiles</p>
                     </div>
                     <span class="stat-arrow">→</span>
@@ -1300,10 +1364,10 @@
             </div>
         </div>
         <div class="ai-chatbot-config hidden" id="aiChatbotConfig">
-            <input type="password" id="aiChatbotGeminiKey" class="input-field" placeholder="Gemini API Key (Optional)">
+            <input type="password" id="aiChatbotGeminiKey" class="input-field" placeholder="Gemini API key from Google AI Studio (Optional)">
             <input type="password" id="aiChatbotOpenAIKey" class="input-field" placeholder="OpenAI API Key (Optional)">
             <input type="password" id="aiChatbotOpenRouterKey" class="input-field" placeholder="OpenRouter API Key (Optional)">
-            <p class="ai-chatbot-config-copy">Keys are saved locally in your browser. Leave blank to use free general knowledge fallback.</p>
+            <p class="ai-chatbot-config-copy">Keys are saved locally in your browser. Gemini uses gemini-2.5-flash first, then gemini-2.0-flash. Leave blank to use free general knowledge fallback.</p>
         </div>
         <div class="ai-chatbot-messages" id="aiChatbotMessages">
             <div class="ai-chatbot-message bot">

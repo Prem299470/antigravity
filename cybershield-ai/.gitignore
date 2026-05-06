@@ -1,0 +1,30 @@
+# Metadata & System Logs
+annotations/
+brain/
+browser_recordings/
+code_tracker/
+context_state/
+conversations/
+html_artifacts/
+implicit/
+knowledge/
+playground/
+prompting/
+repo_temp/
+installation_id
+
+# Application Logs
+*.log
+*.out
+*.err
+
+# Netlify
+.netlify/
+dist/
+
+# OS Specific
+.DS_Store
+Thumbs.db
+
+# Backups
+skills/* - Copy*
