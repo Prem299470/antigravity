@@ -20,6 +20,7 @@ installation_id
 
 # Netlify
 .netlify/
+dist/
 
 # OS Specific
 .DS_Store
