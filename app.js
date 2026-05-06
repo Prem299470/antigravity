@@ -8940,13 +8940,6 @@ async function loadWifiDeviceSnapshot(forceRefresh) {
         return scan;
     }
 
-    if (!canUseNativeWifiScanner()) {
-        const hostedSnapshot = getHostedWifiSnapshot();
-        Object.assign(scan, hostedSnapshot);
-        renderNetworkWifiChecks();
-        return scan;
-    }
-
     scan.loading = true;
     renderNetworkWifiChecks();
 
@@ -8965,16 +8958,25 @@ async function loadWifiDeviceSnapshot(forceRefresh) {
         scan.network = data && data.network ? data.network : null;
         scan.devices = data && Array.isArray(data.devices) ? data.devices : [];
         scan.meta = data && data.meta ? data.meta : null;
+        scan.hostedMode = false;
         scan.lastLoadedAt = Date.now();
         scan.lastError = '';
     } catch (error) {
-        scan.available = false;
-        scan.network = null;
-        scan.devices = [];
-        scan.meta = null;
-        scan.lastError = error && error.message
-            ? error.message
-            : 'Local Wi-Fi API unavailable. Start wifi-api-server.js to list connected devices.';
+        if (!isLocalWifiScannerRuntime()) {
+            const hostedSnapshot = getHostedWifiSnapshot();
+            Object.assign(scan, hostedSnapshot);
+            scan.lastError = error && error.message
+                ? error.message
+                : 'Local bridge unavailable';
+        } else {
+            scan.available = false;
+            scan.network = null;
+            scan.devices = [];
+            scan.meta = null;
+            scan.lastError = error && error.message
+                ? error.message
+                : 'Local Wi-Fi API unavailable. Start wifi-api-server.js to list connected devices.';
+        }
     } finally {
         scan.loading = false;
         renderNetworkWifiChecks();
@@ -9202,9 +9204,8 @@ function isLoopbackHostname(hostname) {
     return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
 }
 
-function canUseNativeWifiScanner() {
-    if (window.location.protocol === 'file:') return true;
-    return isLoopbackHostname(window.location.hostname);
+function isLocalWifiScannerRuntime() {
+    return window.location.protocol === 'file:' || isLoopbackHostname(window.location.hostname);
 }
 
 function getHostedWifiSnapshot() {
@@ -9246,7 +9247,7 @@ function getHostedWifiSnapshot() {
 }
 
 function configureWifiScannerUi() {
-    if (canUseNativeWifiScanner()) return;
+    if (isLocalWifiScannerRuntime()) return;
 
     const scanBtn = document.getElementById('wifiScanBtn');
     const rescanBtn = document.getElementById('wifiRescanBtn');
@@ -9255,17 +9256,17 @@ function configureWifiScannerUi() {
     const subtitle = document.querySelector('#section-wifi-connections .section-subtitle');
     const dashStatus = document.getElementById('dashWifiStatus');
 
-    if (scanBtn) scanBtn.textContent = 'Run Browser Check';
-    if (rescanBtn) rescanBtn.textContent = 'Refresh Browser Check';
-    if (subtitle) subtitle.textContent = 'Hosted-safe wireless diagnostics using browser telemetry, public edge data, and secure-context checks';
+    if (scanBtn) scanBtn.textContent = 'Scan via Local Bridge';
+    if (rescanBtn) rescanBtn.textContent = 'Re-Scan via Local Bridge';
+    if (subtitle) subtitle.textContent = 'Hosted app with local scanner bridge support for router device discovery when your desktop scanner is running';
     if (emptyState) {
-        emptyState.innerHTML = '<div style="font-size:3.5rem;margin-bottom:1rem;opacity:.5;">📶</div><p style="font-size:1rem;margin-bottom:.5rem;">Run a <strong style="color:#0ea5e9;">Browser Check</strong> to inspect the active connection, public IP, and Wi-Fi security hints available to the browser.</p><p style="font-size:.85rem;opacity:.7;">Hosted sites cannot read your router ARP table or enumerate devices on your local LAN.</p>';
+        emptyState.innerHTML = '<div style="font-size:3.5rem;margin-bottom:1rem;opacity:.5;">📶</div><p style="font-size:1rem;margin-bottom:.5rem;">Click <strong style="color:#0ea5e9;">Scan via Local Bridge</strong> to ask the Netlify page to connect to the Wi-Fi scanner running on your computer.</p><p style="font-size:.85rem;opacity:.7;">If the local bridge is unavailable, the page will fall back to browser-safe diagnostics only.</p>';
     }
     if (errorBox) {
-        errorBox.innerHTML = '<strong>Browser-only mode.</strong> This hosted page can analyze connection hints and edge exposure, but LAN device discovery only works in a local desktop run because browsers do not expose router neighbor tables.';
+        errorBox.innerHTML = '<strong>Local bridge not detected.</strong> Start the desktop scanner on your machine so this hosted page can request connected-device names from your local Wi-Fi API.';
     }
     if (dashStatus) {
-        dashStatus.textContent = 'Hosted browser check available';
+        dashStatus.textContent = 'Hosted bridge mode available';
     }
 }
 
@@ -9288,14 +9289,14 @@ function hideEl(id) {
 function setWifiScanError(isServerOffline, message) {
     const el = document.getElementById('wifiScanError');
     if (!el) return;
-    if (!canUseNativeWifiScanner()) {
+    if (!isLocalWifiScannerRuntime()) {
         el.innerHTML = `
             <div style="display:flex;align-items:flex-start;gap:.9rem;">
-                <span style="font-size:2rem;line-height:1;">🌐</span>
+                <span style="font-size:2rem;line-height:1;">🔌</span>
                 <div>
-                    <strong style="font-size:1rem;color:#f87171;">Hosted Browser Mode</strong>
-                    <p style="margin:.4rem 0 .6rem;color:#fca5a5;font-size:.9rem;">${escapeHtml(message || 'Direct LAN device discovery is unavailable from the hosted site.')}</p>
-                    <p style="margin:0;color:#94a3b8;font-size:.82rem;">Browsers do not expose your local router ARP table, DHCP leases, or neighboring device list to Netlify-hosted pages.</p>
+                    <strong style="font-size:1rem;color:#f87171;">Local Scanner Bridge Unavailable</strong>
+                    <p style="margin:.4rem 0 .6rem;color:#fca5a5;font-size:.9rem;">${escapeHtml(message || 'The hosted page could not reach the Wi-Fi scanner bridge on this computer.')}</p>
+                    <p style="margin:0;color:#94a3b8;font-size:.82rem;">Start <code>server.js</code> or <code>start_cybershield.bat</code> on this machine, then try the scan again from Netlify.</p>
                 </div>
             </div>`;
         return;
@@ -9340,23 +9341,9 @@ async function startWifiScan(forceRefresh) {
     const btn = document.getElementById('wifiScanBtn');
     if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
 
-    setWifiProgress(5, canUseNativeWifiScanner() ? 'Connecting to scanner…' : 'Collecting browser network telemetry...');
+    setWifiProgress(5, isLocalWifiScannerRuntime() ? 'Connecting to scanner…' : 'Connecting to local scanner bridge...');
 
     try {
-        if (!canUseNativeWifiScanner()) {
-            setWifiProgress(25, 'Inspecting browser connection hints...');
-            await new Promise(r => setTimeout(r, 250));
-            await loadRealExitInfo(forceRefresh);
-            setWifiProgress(55, 'Refreshing hosted network snapshot...');
-            await new Promise(r => setTimeout(r, 250));
-            const data = getHostedWifiSnapshot();
-            Object.assign(networkState.wifiScan, data);
-            setWifiProgress(100, 'Browser network view updated');
-            await new Promise(r => setTimeout(r, 220));
-            renderHostedWifiResults(data);
-            return;
-        }
-
         // Step 1: Check API health
         setWifiProgress(10, 'Checking scanner service…');
         const health = await fetch(`${WIFI_API}/health`, { signal: AbortSignal.timeout(3000) });
@@ -9387,6 +9374,13 @@ async function startWifiScan(forceRefresh) {
         renderWifiResults(data);
 
     } catch (err) {
+        const shouldFallbackToHostedSnapshot = !isLocalWifiScannerRuntime();
+        if (shouldFallbackToHostedSnapshot) {
+            await loadRealExitInfo(forceRefresh);
+            const data = getHostedWifiSnapshot();
+            Object.assign(networkState.wifiScan, data);
+            renderHostedWifiResults(data);
+        }
         hideEl('wifiScanStatus');
         // Categorize the error for a helpful message
         const isNetworkError = !err ||
@@ -9398,9 +9392,14 @@ async function startWifiScan(forceRefresh) {
         let friendlyMsg = null;
         if (isTimeout) friendlyMsg = 'Connection timed out — the scanner may still be starting. Try Re-Scan in a moment.';
         else if (!isNetworkError) friendlyMsg = err && err.message ? err.message : 'Wi-Fi scan failed';
-        setWifiScanError(isNetworkError && !isTimeout, friendlyMsg);
-        showEl('wifiScanError', 'block');
-        showEl('wifiEmptyState', 'block');
+        if (shouldFallbackToHostedSnapshot) {
+            setWifiScanError(isNetworkError && !isTimeout, friendlyMsg || 'Could not reach the local Wi-Fi scanner bridge from the hosted page.');
+            showEl('wifiScanError', 'block');
+        } else {
+            setWifiScanError(isNetworkError && !isTimeout, friendlyMsg);
+            showEl('wifiScanError', 'block');
+            showEl('wifiEmptyState', 'block');
+        }
     } finally {
         wifiScanInProgress = false;
         hideEl('wifiScanStatus');
@@ -9609,15 +9608,6 @@ function initWifiSignalWaveGraph() {
 
 // Background refresh for dashboard card stats
 async function refreshWifiDashboard() {
-    if (!canUseNativeWifiScanner()) {
-        const dashStatus = document.getElementById('dashWifiStatus');
-        const dashCount = document.getElementById('dashWifiCount');
-        const link = getNetworkLinkDetails();
-        if (dashStatus) dashStatus.textContent = `Browser check: ${link.label || 'Adaptive link'}`;
-        if (dashCount) dashCount.style.display = 'none';
-        return;
-    }
-
     try {
         const resp = await fetch(`${WIFI_API}/api/wifi/devices`, { signal: AbortSignal.timeout(5000) });
         if (resp.ok) {
@@ -9631,7 +9621,15 @@ async function refreshWifiDashboard() {
             }
         }
     } catch (e) {
-        // Silently fail if server offline
+        const dashStatus = document.getElementById('dashWifiStatus');
+        const dashCount = document.getElementById('dashWifiCount');
+        const link = getNetworkLinkDetails();
+        if (dashStatus) {
+            dashStatus.textContent = isLocalWifiScannerRuntime()
+                ? 'Scanner offline'
+                : `Bridge fallback: ${link.label || 'Adaptive link'}`;
+        }
+        if (dashCount) dashCount.style.display = 'none';
     }
 }
 
