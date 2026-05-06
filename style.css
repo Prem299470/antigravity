@@ -4214,7 +4214,9 @@ select.input-field,
 }
 
 .banner-content {
+    display: grid;
     grid-template-columns: auto minmax(0, 1fr) minmax(220px, 280px);
+    align-items: stretch;
 }
 
 .banner-copy h2 {
@@ -4256,6 +4258,7 @@ select.input-field,
 
 .stat-info {
     padding-top: 2px;
+    min-width: 0;
 }
 
 .stat-info h3 {
@@ -4291,6 +4294,62 @@ select.input-field,
     border-radius: 22px;
 }
 
+.banner-copy,
+.banner-tags,
+.banner-tag,
+.banner-metrics,
+.banner-metric,
+.banner-metric-label,
+.banner-metric-value,
+.ops-chip-group,
+.ops-chip,
+.ops-signal-panel,
+.ops-signal,
+.ops-signal-label,
+.ops-signal-value,
+.telemetry-row,
+.telemetry-value,
+.stat-info h3,
+.stat-info p,
+.section-header h1,
+.section-subtitle,
+.results-header h2,
+.threat-badge,
+.new-badge,
+.emergency-badge,
+.network-list-head,
+.network-list-body,
+.network-list-time,
+.wifi-device-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.results-header,
+.network-list-head {
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.threat-badge {
+    max-width: 100%;
+    white-space: normal;
+    text-align: center;
+}
+
+.ops-signal-panel,
+.banner-metrics {
+    align-self: stretch;
+}
+
+.ops-chip,
+.banner-tag,
+.new-badge,
+.emergency-badge {
+    max-width: 100%;
+}
+
 @media (max-width: 1180px) {
     .ops-topbar {
         flex-direction: column;
@@ -4298,6 +4357,16 @@ select.input-field,
 
     .ops-signal-panel {
         min-width: 0;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .banner-content {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .banner-metrics {
+        grid-column: 1 / -1;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
 
@@ -4325,10 +4394,25 @@ select.input-field,
     }
 
     .banner-content {
+        display: grid;
+        grid-template-columns: 1fr;
         gap: 18px;
     }
 
     .banner-copy h2 {
         max-width: none;
+    }
+
+    .banner-metrics,
+    .ops-signal-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .results-header {
+        align-items: flex-start;
+    }
+
+    .stat-card {
+        min-height: 0;
     }
 }
