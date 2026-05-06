@@ -4,11 +4,14 @@
 
 const PASSWORD_STORAGE_KEY = 'cybershield-password-manager';
 const VT_API_KEY_STORAGE_KEY = 'cybershield-vt-api-key';
+const CHATBOT_FEEDBACK_STORAGE_KEY = 'shieldbox-chatbot-feedback';
 const VT_DIRECT_UPLOAD_LIMIT = 32 * 1024 * 1024;
 const chatbotDom = {};
 const chatbotHistory = [];
+const openAIChatState = { previousResponseId: '' };
+let chatbotLastResponseMeta = null;
 const SHIELD_BOX_OPENROUTER_API_KEY = '';
-const SHIELD_BOX_OPENROUTER_MODEL = 'openrouter/free';
+const SHIELD_BOX_OPENROUTER_MODEL = 'openrouter/auto';
 const websiteKnowledgeBase = [
     {
         id: 'dashboard',
@@ -269,9 +272,379 @@ const cybersecurityAnswerBook = [
     }
 ];
 
+const expandedCybersecurityAnswerBook = [
+    {
+        title: 'Malware and Viruses',
+        intents: ['what', 'detect', 'prevent', 'respond'],
+        keywords: ['malware', 'virus', 'computer virus', 'trojan', 'worm', 'spyware', 'adware', 'malicious file', 'infected computer'],
+        answer: {
+            what: 'Malware is malicious software designed to steal data, spy on activity, disrupt systems, encrypt files, or give attackers unauthorized access. A virus spreads by attaching to files or programs, a worm self-replicates across systems, a trojan disguises itself as legitimate software, and spyware secretly monitors activity or collects data.',
+            detect: 'Look for unexpected processes, disabled security tools, unusual popups, unknown startup items, suspicious browser extensions, high CPU or network use, new scheduled tasks, blocked EDR alerts, and files with risky origins.',
+            prevent: 'Keep the OS and apps patched, use reputable endpoint protection, avoid unknown downloads and macros, restrict admin rights, use browser and email protections, and back up important files.',
+            respond: 'Disconnect the device from the network if compromise is likely, run trusted scans, preserve suspicious files or alerts, reset exposed passwords from a clean device, remove persistence, and rebuild the system if trust cannot be restored.'
+        }
+    },
+    {
+        title: 'Website Security',
+        intents: ['what', 'detect', 'prevent', 'best', 'steps'],
+        keywords: ['website security', 'secure website', 'secure my website', 'web app security', 'secure web app', 'website hardening', 'web security checklist'],
+        answer: {
+            what: 'Website security protects a site or web app from account abuse, injection, broken access control, data leaks, malicious files, and service disruption.',
+            detect: 'Monitor failed logins, admin changes, unusual uploads, unexpected redirects, web server errors, WAF alerts, dependency alerts, suspicious form submissions, and changes to critical files.',
+            prevent: 'Use HTTPS, secure authentication, MFA for admins, server-side authorization checks, parameterized queries, output encoding, CSRF protection, secure cookies, dependency updates, backups, and least-privilege hosting access.',
+            best: 'Prioritize access control, input handling, patching, backups, admin MFA, security headers, secret protection, logging, and a tested recovery plan.',
+            steps: 'Start with HTTPS and admin MFA, update the platform and plugins, remove unused components, review roles, scan dependencies, add security headers, configure backups, enable logs, and test common risks like XSS, SQL injection, and broken access control.'
+        }
+    },
+    {
+        title: 'Suspicious Links and URL Analysis',
+        intents: ['what', 'detect', 'prevent', 'respond', 'steps'],
+        keywords: ['suspicious link', 'unsafe link', 'malicious url', 'phishing link', 'suspicious url', 'url analysis', 'link scanner', 'short link', 'redirect link', 'typosquatting', 'lookalike domain'],
+        answer: {
+            what: 'Suspicious-link analysis checks whether a URL is likely to be phishing, malware delivery, credential theft, payment fraud, tracking, or impersonation.',
+            detect: 'Check the real domain, HTTPS, misspellings, punycode, extra subdomains, URL shorteners, urgent words, fake login paths, mismatched brand names, unusual TLDs, redirects, and whether the link asks for credentials, payment, or downloads.',
+            prevent: 'Do not click unknown links directly. Preview the URL, type sensitive sites manually, use a password manager to detect fake domains, scan with a reputable URL checker, and verify the sender through a separate trusted channel.',
+            respond: 'If you clicked a suspicious link, close it, do not enter data, reset any submitted credentials from a trusted device, revoke sessions, monitor accounts, and scan the device if anything downloaded.',
+            steps: 'For a quick check: 1. Expand shortened links safely. 2. Identify the registered domain. 3. Compare it with the official brand domain. 4. Inspect the path for login/payment/download pressure. 5. Search reputation only from trusted tools. 6. Treat credential or payment requests as high risk until verified.'
+        }
+    },
+    {
+        title: 'Router Security',
+        intents: ['what', 'detect', 'prevent', 'best', 'steps'],
+        keywords: ['router security', 'secure router', 'protect router', 'router hacked', 'router password', 'router firmware', 'home router'],
+        answer: {
+            what: 'Router security protects the device that connects your network to the internet. A weak router can expose every device behind it.',
+            detect: 'Warning signs include unknown DNS settings, unfamiliar admin users, changed Wi-Fi names, unknown connected devices, open remote management, strange redirects, and outdated firmware.',
+            prevent: 'Change the admin password, use WPA2-AES or WPA3, update firmware, disable remote admin unless required, turn off WPS, use a guest network for visitors and IoT, and review connected devices.',
+            best: 'Keep router firmware current, use a strong admin password separate from the Wi-Fi password, disable unused features, and replace routers that no longer receive updates.',
+            steps: 'Log in to the router admin panel, update firmware, change admin credentials, verify DNS and remote-management settings, set WPA2/WPA3 with a strong Wi-Fi password, disable WPS, and remove unknown clients.'
+        }
+    },
+    {
+        title: 'Password Security',
+        intents: ['what', 'best', 'prevent', 'respond'],
+        keywords: ['password security', 'password manager', 'password reuse', 'weak password', 'strong password', 'credential stuffing', 'password attack'],
+        answer: {
+            what: 'Password security is about preventing guessing, reuse, theft, and replay of passwords. The biggest risks are reused passwords, short passwords, leaked credentials, and phishing.',
+            best: 'Use a password manager, generate unique long passwords for every account, enable phishing-resistant MFA where possible, and avoid SMS-only recovery for important accounts.',
+            prevent: 'Block common and leaked passwords, rate-limit login attempts, monitor credential-stuffing patterns, protect reset flows, and train users to rely on password managers to spot fake domains.',
+            respond: 'If a password may be exposed, reset it everywhere it was reused, revoke active sessions, check recovery email and MFA settings, and review recent account activity.'
+        }
+    },
+    {
+        title: 'Passkeys and FIDO2',
+        intents: ['what', 'compare', 'best', 'prevent'],
+        keywords: ['passkey', 'passkeys', 'fido2', 'security key', 'webauthn', 'phishing resistant mfa', 'hardware key'],
+        answer: {
+            what: 'Passkeys use public-key cryptography so the service stores a public key and your device keeps the private key. This makes them resistant to password reuse, credential stuffing, and most phishing.',
+            compare: 'Passkeys and FIDO2 keys are stronger than SMS or push MFA because they are bound to the real website origin. Authenticator apps are good, but passkeys are usually stronger against phishing.',
+            best: 'Use passkeys or hardware security keys for email, banking, cloud consoles, admin accounts, and password managers first.',
+            prevent: 'Protect device unlock, register backup keys or recovery methods, and keep account recovery as strong as the passkey login path.'
+        }
+    },
+    {
+        title: 'Account Takeover',
+        intents: ['what', 'detect', 'prevent', 'respond'],
+        keywords: ['account takeover', 'ato', 'hacked account', 'session hijacking', 'login alert', 'unauthorized login', 'stolen session'],
+        answer: {
+            what: 'Account takeover happens when an attacker gains control of an account through stolen credentials, phishing, malware, weak recovery, or stolen sessions.',
+            detect: 'Look for impossible travel, new devices, changed recovery settings, unexpected MFA prompts, suspicious forwarding rules, unfamiliar OAuth apps, and unusual downloads or payment activity.',
+            prevent: 'Use unique passwords, phishing-resistant MFA, login risk scoring, session controls, device posture checks, strong recovery flows, and alerts for sensitive account changes.',
+            respond: 'Reset credentials, revoke sessions and tokens, remove unknown devices and OAuth apps, restore recovery settings, check mail forwarding rules, and review financial or data access.'
+        }
+    },
+    {
+        title: 'Business Email Compromise',
+        intents: ['what', 'detect', 'prevent', 'respond'],
+        keywords: ['business email compromise', 'bec', 'invoice fraud', 'ceo fraud', 'payment redirection', 'wire fraud', 'vendor fraud'],
+        answer: {
+            what: 'Business email compromise is fraud where attackers impersonate executives, vendors, or employees to redirect payments, steal data, or approve unauthorized actions.',
+            detect: 'Warning signs include changed bank details, urgent secrecy, unusual sender domains, mailbox rules, altered invoice language, and requests that bypass normal approvals.',
+            prevent: 'Use callback verification on trusted numbers, dual approval for payment changes, DMARC/SPF/DKIM, mailbox rule monitoring, finance training, and vendor-change workflows.',
+            respond: 'Contact the bank immediately, preserve email headers and logs, disable compromised accounts, revoke sessions, remove forwarding rules, and report to the appropriate fraud or cybercrime channel.'
+        }
+    },
+    {
+        title: 'Email Authentication',
+        intents: ['what', 'best', 'prevent', 'detect'],
+        keywords: ['spf', 'dkim', 'dmarc', 'email authentication', 'email spoofing', 'domain spoofing'],
+        answer: {
+            what: 'SPF, DKIM, and DMARC help receiving mail systems verify whether messages using your domain are authorized and whether they were modified.',
+            best: 'Use SPF for authorized senders, DKIM for cryptographic signing, and DMARC with reporting first, then move toward quarantine or reject once legitimate senders are aligned.',
+            prevent: 'Inventory all legitimate mail senders, align SPF and DKIM, monitor DMARC reports, and protect lookalike domains with brand monitoring where possible.',
+            detect: 'DMARC aggregate reports, failed authentication results, and user reports of spoofed messages are useful signals for impersonation attempts.'
+        }
+    },
+    {
+        title: 'Network Security',
+        intents: ['what', 'detect', 'prevent', 'best'],
+        keywords: ['network security', 'segmentation', 'firewall', 'ids', 'ips', 'network monitoring', 'east west traffic', 'north south traffic'],
+        answer: {
+            what: 'Network security protects traffic, services, and boundaries using segmentation, access control, monitoring, secure configuration, and detection.',
+            detect: 'Useful signals include unexpected ports, lateral movement, unusual DNS, beaconing, traffic to rare destinations, scans, and authentication attempts across many hosts.',
+            prevent: 'Segment critical assets, restrict inbound and outbound traffic, harden exposed services, monitor DNS and proxy logs, and use least privilege for service access.',
+            best: 'Start with an asset map, internet exposure review, firewall baselines, logging coverage, and response playbooks for suspicious traffic.'
+        }
+    },
+    {
+        title: 'Firewall Rules',
+        intents: ['what', 'best', 'prevent'],
+        keywords: ['firewall rule', 'firewall rules', 'allowlist', 'denylist', 'network ACL', 'security group', 'open port'],
+        answer: {
+            what: 'Firewall rules define which traffic is allowed or denied between networks, hosts, or services.',
+            best: 'Use deny-by-default for sensitive zones, allow only required ports and sources, document rule owners, add expiration for temporary rules, and review unused or broad rules regularly.',
+            prevent: 'Avoid exposing admin ports to the internet, restrict management access to trusted networks or VPN, log denied traffic where useful, and test rules after changes.'
+        }
+    },
+    {
+        title: 'VPN',
+        intents: ['what', 'best', 'compare', 'prevent'],
+        keywords: ['vpn', 'virtual private network', 'wireguard', 'ipsec', 'ssl vpn', 'remote access vpn'],
+        answer: {
+            what: 'A VPN creates an encrypted tunnel between a device and a network or provider. It protects traffic on untrusted networks and can provide controlled remote access.',
+            best: 'For remote access, require MFA, device posture checks, least-privilege routes, logging, patching, and strong protocols such as WireGuard or modern IPsec where appropriate.',
+            compare: 'A consumer VPN changes your public exit path; an enterprise VPN grants access to internal resources, so enterprise VPNs need stricter identity and device controls.',
+            prevent: 'Do not treat VPN access as full trust. Segment internal access and monitor VPN logins, impossible travel, and unusual data transfer.'
+        }
+    },
+    {
+        title: 'Wi-Fi Security',
+        intents: ['what', 'detect', 'prevent', 'best'],
+        keywords: ['wifi security', 'wi-fi security', 'wpa2', 'wpa3', 'evil twin', 'rogue access point', 'public wifi', 'wireless security'],
+        answer: {
+            what: 'Wi-Fi security protects wireless access from eavesdropping, rogue access points, weak encryption, and unauthorized clients.',
+            detect: 'Look for unknown access points with similar names, certificate warnings, unexpected captive portals, weak signal anomalies, and unfamiliar devices on your router client list.',
+            prevent: 'Use WPA2-AES or WPA3, strong unique Wi-Fi passwords, router firmware updates, guest networks for visitors and IoT, and avoid sensitive logins on suspicious public Wi-Fi.',
+            best: 'For organizations, prefer WPA2/WPA3 Enterprise with per-user identity, certificate validation, rogue AP detection, and segmented wireless networks.'
+        }
+    },
+    {
+        title: 'DNS Security',
+        intents: ['what', 'detect', 'prevent', 'best'],
+        keywords: ['dns security', 'dns spoofing', 'dns poisoning', 'dns filtering', 'doh', 'dot', 'dns tunneling'],
+        answer: {
+            what: 'DNS security protects name resolution from malicious domains, tampering, tunneling, and privacy leakage.',
+            detect: 'Watch for newly registered domains, high-entropy subdomains, unusual TXT queries, rare destinations, and DNS requests that bypass approved resolvers.',
+            prevent: 'Use trusted resolvers, DNS filtering, DNSSEC validation where supported, endpoint controls to prevent resolver bypass, and monitoring for tunneling patterns.',
+            best: 'DNS logs are high-value telemetry. Keep them long enough for investigations and correlate them with endpoint and proxy activity.'
+        }
+    },
+    {
+        title: 'DDoS',
+        intents: ['what', 'detect', 'prevent', 'respond'],
+        keywords: ['ddos', 'dos attack', 'denial of service', 'traffic flood', 'botnet flood'],
+        answer: {
+            what: 'DDoS is a denial-of-service attack where many sources overwhelm a service, network, or application so legitimate users cannot access it.',
+            detect: 'Indicators include sudden traffic spikes, high request rates, overloaded resources, many similar requests, and traffic from unusual geographies or networks.',
+            prevent: 'Use CDN or DDoS protection, rate limits, autoscaling, caching, upstream filtering, WAF rules for application-layer floods, and tested runbooks.',
+            respond: 'Engage your provider or DDoS mitigation service, identify the traffic pattern, apply filtering or rate limits, preserve logs, and communicate service status clearly.'
+        }
+    },
+    {
+        title: 'Malware Analysis',
+        intents: ['what', 'steps', 'best', 'detect'],
+        keywords: ['malware analysis', 'static analysis', 'dynamic analysis', 'sandbox analysis', 'ioc', 'indicator of compromise'],
+        answer: {
+            what: 'Malware analysis studies suspicious files or behavior to understand capability, impact, indicators, and containment options.',
+            steps: 'A safe workflow is: collect hashes and metadata, perform static inspection, run in an isolated sandbox if authorized, record network/file/process behavior, extract indicators, and map findings to detection and response.',
+            best: 'Use isolated lab systems, no shared clipboard or credentials, controlled networking, snapshots, and never run unknown samples on your daily machine.',
+            detect: 'Useful indicators include file hashes, mutexes, persistence locations, command-and-control domains, process trees, registry changes, scheduled tasks, and suspicious parent-child processes.'
+        }
+    },
+    {
+        title: 'Endpoint Security',
+        intents: ['what', 'detect', 'prevent', 'respond'],
+        keywords: ['endpoint security', 'edr', 'antivirus', 'endpoint detection', 'device hardening', 'laptop security'],
+        answer: {
+            what: 'Endpoint security protects laptops, desktops, and servers from malware, misuse, credential theft, and unauthorized changes.',
+            detect: 'High-value detections include suspicious PowerShell, unusual child processes, credential dumping behavior, persistence changes, unsigned binaries in user paths, and abnormal outbound traffic.',
+            prevent: 'Patch operating systems and apps, use EDR, remove local admin where possible, enforce disk encryption, enable application control for high-risk systems, and protect credentials.',
+            respond: 'Isolate the host, preserve evidence, collect triage data, identify scope, remove persistence, reset exposed credentials, and rebuild when trust cannot be restored.'
+        }
+    },
+    {
+        title: 'Cloud Security',
+        intents: ['what', 'detect', 'prevent', 'best'],
+        keywords: ['cloud security', 'aws security', 'azure security', 'gcp security', 'cloud misconfiguration', 's3 bucket', 'storage bucket'],
+        answer: {
+            what: 'Cloud security protects identities, workloads, data, networks, and configurations in cloud environments under a shared-responsibility model.',
+            detect: 'Watch for public storage, overly broad IAM, disabled logging, unusual API calls, new access keys, exposed secrets, and security group changes.',
+            prevent: 'Use least-privilege IAM, centralized logging, encryption, secure baselines, guardrails, secret scanning, network restrictions, and automated configuration checks.',
+            best: 'Prioritize identity, logging, public exposure, backups, and secrets first. Most serious cloud incidents involve weak IAM, exposed data, or leaked credentials.'
+        }
+    },
+    {
+        title: 'Cloud IAM',
+        intents: ['what', 'best', 'prevent', 'detect'],
+        keywords: ['cloud iam', 'iam policy', 'least privilege cloud', 'access key', 'role assumption', 'privileged cloud account'],
+        answer: {
+            what: 'Cloud IAM controls who and what can access cloud resources. It is often the most important cloud security layer.',
+            best: 'Use roles over long-lived keys, least privilege, permission boundaries or guardrails, MFA for privileged users, and separate admin duties from daily work.',
+            prevent: 'Rotate and remove unused keys, block public privilege escalation paths, require approval for privileged roles, and use automated policy analysis.',
+            detect: 'Alert on new access keys, privilege changes, unusual role assumptions, impossible travel, disabled logs, and API calls from rare locations.'
+        }
+    },
+    {
+        title: 'Container Security',
+        intents: ['what', 'detect', 'prevent', 'best'],
+        keywords: ['container security', 'docker security', 'kubernetes security', 'k8s security', 'image scanning', 'container escape'],
+        answer: {
+            what: 'Container security protects images, registries, runtime configuration, orchestration, secrets, and workload isolation.',
+            detect: 'Monitor privileged containers, hostPath mounts, suspicious exec sessions, unexpected outbound traffic, new cluster roles, and images with critical vulnerabilities.',
+            prevent: 'Use minimal images, scan dependencies, avoid privileged mode, restrict capabilities, run as non-root, protect secrets, enforce network policies, and patch base images.',
+            best: 'For Kubernetes, secure RBAC, admission controls, network policies, audit logs, secret management, and node hardening are core controls.'
+        }
+    },
+    {
+        title: 'API Security',
+        intents: ['what', 'detect', 'prevent', 'best'],
+        keywords: ['api security', 'broken object level authorization', 'bola', 'idor', 'rate limiting api', 'jwt security', 'api token'],
+        answer: {
+            what: 'API security protects application interfaces from broken authorization, data exposure, abuse, injection, and token compromise.',
+            detect: 'Look for access to other users objects, unusual request rates, token reuse from strange locations, verbose errors, and endpoints returning excessive data.',
+            prevent: 'Enforce object-level authorization on every request, validate input, use rate limits, protect tokens, use schema validation, and keep sensitive data out of logs.',
+            best: 'Never trust client-side checks for authorization. The server must verify who can access each object and action.'
+        }
+    },
+    {
+        title: 'Secure Coding',
+        intents: ['what', 'steps', 'best', 'prevent'],
+        keywords: ['secure coding', 'secure development', 'sdlc', 'code review security', 'input validation', 'output encoding'],
+        answer: {
+            what: 'Secure coding is building software so common weaknesses are prevented by design, implementation, testing, and review.',
+            steps: 'A practical flow is: threat model risky features, use secure defaults, validate input, encode output, enforce authorization, protect secrets, test abuse cases, and review dependencies.',
+            best: 'Use framework security features, parameterized queries, safe parsers, centralized authz checks, dependency scanning, and code review focused on trust boundaries.',
+            prevent: 'Avoid hand-rolled crypto, string-built queries, unsafe deserialization, dangerous DOM sinks, hardcoded secrets, and authorization logic only in the frontend.'
+        }
+    },
+    {
+        title: 'Threat Modeling',
+        intents: ['what', 'steps', 'best'],
+        keywords: ['threat modeling', 'stride', 'attack tree', 'data flow diagram', 'trust boundary', 'abuse case'],
+        answer: {
+            what: 'Threat modeling is a structured way to identify what can go wrong, what matters most, and what controls should be built before or during implementation.',
+            steps: 'Start by mapping assets, actors, data flows, trust boundaries, and entry points. Then identify threats, rank risk, choose mitigations, and track decisions.',
+            best: 'Keep it lightweight and repeatable. Review new features, auth flows, payment flows, admin functions, integrations, and sensitive data paths.'
+        }
+    },
+    {
+        title: 'Risk Assessment',
+        intents: ['what', 'steps', 'best', 'prioritize'],
+        keywords: ['risk assessment', 'security risk', 'risk register', 'likelihood impact', 'risk matrix', 'cyber risk'],
+        answer: {
+            what: 'Cyber risk assessment estimates how likely a threat is, how much impact it would have, and which controls or decisions reduce that risk.',
+            steps: 'Identify assets, threats, vulnerabilities, existing controls, likelihood, impact, treatment options, owners, and review dates.',
+            best: 'Use plain language, evidence, and asset context. A useful risk register drives decisions instead of becoming paperwork.',
+            prioritize: 'Prioritize risks that combine high impact, realistic threat activity, weak controls, internet exposure, sensitive data, or regulatory obligations.'
+        }
+    },
+    {
+        title: 'Data Loss Prevention',
+        intents: ['what', 'detect', 'prevent', 'respond'],
+        keywords: ['dlp', 'data loss prevention', 'data leakage', 'data exfiltration', 'sensitive data exposure'],
+        answer: {
+            what: 'Data loss prevention reduces accidental or malicious exposure of sensitive data across endpoints, email, cloud storage, and network channels.',
+            detect: 'Signals include large unusual downloads, uploads to personal accounts, sensitive patterns in outbound email, public sharing links, and access outside normal roles.',
+            prevent: 'Classify sensitive data, restrict sharing, use least privilege, encrypt data, monitor exports, and apply DLP controls where they match real workflows.',
+            respond: 'Revoke exposed links or tokens, identify recipients and data scope, preserve logs, notify stakeholders, and rotate affected credentials or secrets.'
+        }
+    },
+    {
+        title: 'Encryption and TLS',
+        intents: ['what', 'best', 'prevent', 'compare'],
+        keywords: ['encryption', 'tls', 'https', 'certificate', 'ssl', 'public key cryptography', 'at rest', 'in transit'],
+        answer: {
+            what: 'Encryption protects data confidentiality and integrity by making data unreadable without the right key. TLS protects data in transit, while storage encryption protects data at rest.',
+            best: 'Use modern TLS, trusted certificates, strong key management, rotation plans, and proven libraries. Do not invent custom cryptography.',
+            prevent: 'Disable obsolete protocols, protect private keys, use HSTS for web apps, encrypt backups, and separate key access from data access.',
+            compare: 'Hashing verifies or stores one-way digests; encryption is reversible with a key; signing proves authenticity and integrity.'
+        }
+    },
+    {
+        title: 'Secrets Management',
+        intents: ['what', 'detect', 'prevent', 'respond'],
+        keywords: ['secret management', 'secrets management', 'api key', 'api token', 'api tokens', 'access token', 'token security', 'api key leaked', 'hardcoded secret', 'token leak', 'credential leak', 'env file'],
+        answer: {
+            what: 'Secrets management protects API keys, tokens, passwords, certificates, and private keys from exposure and misuse.',
+            detect: 'Use secret scanning in code, CI, containers, logs, tickets, and cloud storage. Watch for new keys, unusual API use, and secrets committed to repositories.',
+            prevent: 'Store secrets in a vault or managed secret service, use short-lived credentials, avoid hardcoding, restrict access, and rotate regularly.',
+            respond: 'Assume leaked secrets are compromised. Revoke or rotate them, review access logs, remove exposed copies, and check for abuse.'
+        }
+    },
+    {
+        title: 'Supply Chain Security',
+        intents: ['what', 'detect', 'prevent', 'best'],
+        keywords: ['supply chain security', 'dependency confusion', 'software supply chain', 'sbom', 'package security', 'npm security', 'dependency attack'],
+        answer: {
+            what: 'Software supply-chain security protects the code, dependencies, build systems, artifacts, and vendors that feed into your software.',
+            detect: 'Watch for new dependency maintainers, typo-squatted packages, unexpected package scripts, changed build artifacts, leaked signing keys, and CI changes.',
+            prevent: 'Pin and review dependencies, use lockfiles, scan packages, protect CI secrets, require code review, sign artifacts, and generate SBOMs for important systems.',
+            best: 'Treat CI/CD as production. Compromise of the build pipeline can compromise everything it deploys.'
+        }
+    },
+    {
+        title: 'Logging and Monitoring',
+        intents: ['what', 'best', 'detect', 'steps'],
+        keywords: ['logging', 'security logs', 'monitoring', 'audit logs', 'log retention', 'detection logic', 'alert tuning'],
+        answer: {
+            what: 'Security logging records events needed to detect, investigate, and prove what happened across identities, endpoints, networks, applications, and cloud systems.',
+            best: 'Prioritize authentication, admin activity, endpoint alerts, DNS/proxy, cloud control-plane events, critical app logs, and data access logs.',
+            detect: 'Good detections combine high-signal behaviors with context, such as new admin creation plus rare location, or impossible travel plus MFA reset.',
+            steps: 'Define critical use cases, collect required logs, normalize fields, tune alerts, build response playbooks, and test detections regularly.'
+        }
+    },
+    {
+        title: 'Digital Forensics',
+        intents: ['what', 'steps', 'best', 'respond'],
+        keywords: ['digital forensics', 'forensic', 'evidence preservation', 'chain of custody', 'memory capture', 'disk image'],
+        answer: {
+            what: 'Digital forensics preserves and analyzes digital evidence to determine what happened, when, how, and what was affected.',
+            steps: 'Preserve volatile evidence where appropriate, record timestamps and actions, collect logs and artifacts, maintain chain of custody, analyze copies, and document findings.',
+            best: 'Do not unnecessarily wipe or rebuild before collecting needed evidence. Use write blockers or trusted acquisition methods when legal evidence matters.',
+            respond: 'For active incidents, balance containment with evidence preservation. Record every major action and time.'
+        }
+    },
+    {
+        title: 'Mobile Security',
+        intents: ['what', 'detect', 'prevent', 'respond'],
+        keywords: ['mobile security', 'android security', 'iphone security', 'spyware phone', 'malicious app', 'app permissions'],
+        answer: {
+            what: 'Mobile security protects phones and tablets from malicious apps, phishing, spyware, risky permissions, insecure networks, and account compromise.',
+            detect: 'Watch for unknown apps, unusual battery or data use, accessibility permission abuse, device management profiles, suspicious popups, and unexpected account logins.',
+            prevent: 'Install apps from trusted stores, keep the OS updated, review permissions, use screen lock and MFA, avoid sideloading unknown APKs, and protect cloud account recovery.',
+            respond: 'Remove suspicious apps, revoke sessions, reset important passwords from a clean device, update the OS, and factory reset if spyware or device management abuse is suspected.'
+        }
+    },
+    {
+        title: 'IoT Security',
+        intents: ['what', 'detect', 'prevent', 'best'],
+        keywords: ['iot security', 'smart device security', 'camera security', 'router security', 'default password', 'firmware update'],
+        answer: {
+            what: 'IoT security protects smart devices such as cameras, routers, TVs, sensors, and appliances that often have weak update and identity controls.',
+            detect: 'Look for unknown devices, default credentials, exposed admin interfaces, old firmware, unexpected outbound traffic, and devices communicating with rare domains.',
+            prevent: 'Change default passwords, update firmware, disable unused remote access, place IoT on a guest or segmented network, and retire unsupported devices.',
+            best: 'Routers and cameras deserve special attention because they often sit at sensitive network positions or collect private data.'
+        }
+    },
+    {
+        title: 'Privacy and Data Protection',
+        intents: ['what', 'best', 'prevent', 'steps'],
+        keywords: ['privacy', 'data protection', 'personal data', 'pii', 'privacy risk', 'data minimization'],
+        answer: {
+            what: 'Privacy and data protection focus on collecting, using, storing, sharing, and deleting personal data in ways that reduce harm and meet obligations.',
+            best: 'Collect the minimum data needed, limit access, encrypt sensitive data, define retention periods, log access, and make deletion/export workflows reliable.',
+            prevent: 'Avoid storing sensitive data in logs, analytics, screenshots, support tickets, or test datasets unless there is a clear protected process.',
+            steps: 'Map personal data, identify purpose and lawful basis where relevant, restrict access, protect storage and transfer, set retention, and review third-party sharing.'
+        }
+    }
+];
+
+const allCybersecurityAnswerBook = cybersecurityAnswerBook.concat(expandedCybersecurityAnswerBook);
+
 const cyberQuestionStopwords = new Set([
     'about', 'what', 'which', 'when', 'where', 'why', 'how', 'tell', 'explain', 'define', 'give',
-    'attack', 'attacks', 'security', 'cyber', 'cybersecurity', 'topic', 'details', 'information'
+    'attack', 'attacks', 'security', 'cyber', 'cybersecurity', 'topic', 'details', 'information',
+    'please', 'need', 'want', 'question', 'doubt', 'help', 'safe', 'best', 'ways'
 ]);
 
 // Navigation
@@ -393,16 +766,21 @@ function getChatbotDom() {
     chatbotDom.messages = document.getElementById('aiChatbotMessages');
     chatbotDom.form = document.getElementById('aiChatbotForm');
     chatbotDom.input = document.getElementById('aiChatbotInput');
+    chatbotDom.submit = chatbotDom.form ? chatbotDom.form.querySelector('button[type="submit"]') : null;
     chatbotDom.openrouterKey = document.getElementById('aiChatbotOpenRouterKey');
     chatbotDom.openrouterModel = document.getElementById('aiChatbotOpenRouterModel');
     chatbotDom.openaiKey = document.getElementById('aiChatbotOpenAIKey');
     chatbotDom.geminiKey = document.getElementById('aiChatbotGeminiKey');
+    chatbotDom.settingsBtn = document.getElementById('aiChatbotSettingsBtn');
+    chatbotDom.configPanel = document.getElementById('aiChatbotConfig');
     return chatbotDom;
 }
 
 function initializeChatbot() {
     const dom = getChatbotDom();
-    if (!dom.panel) return;
+    if (!dom.panel || !dom.toggle || !dom.close || !dom.form || !dom.input || !dom.messages) return;
+    if (dom.initialized) return;
+    dom.initialized = true;
 
     dom.toggle.addEventListener('click', () => {
         dom.panel.classList.toggle('hidden');
@@ -415,6 +793,25 @@ function initializeChatbot() {
         dom.panel.classList.add('hidden');
     });
 
+    if (dom.settingsBtn && dom.configPanel) {
+        dom.settingsBtn.addEventListener('click', () => {
+            dom.configPanel.classList.toggle('hidden');
+        });
+    }
+
+    if (dom.geminiKey) {
+        dom.geminiKey.value = localStorage.getItem('cybershield_gemini_key') || '';
+        dom.geminiKey.addEventListener('input', (e) => localStorage.setItem('cybershield_gemini_key', e.target.value.trim()));
+    }
+    if (dom.openaiKey) {
+        dom.openaiKey.value = localStorage.getItem('cybershield_openai_key') || '';
+        dom.openaiKey.addEventListener('input', (e) => localStorage.setItem('cybershield_openai_key', e.target.value.trim()));
+    }
+    if (dom.openrouterKey) {
+        dom.openrouterKey.value = localStorage.getItem('cybershield_openrouter_key') || '';
+        dom.openrouterKey.addEventListener('input', (e) => localStorage.setItem('cybershield_openrouter_key', e.target.value.trim()));
+    }
+
     dom.form.addEventListener('submit', async event => {
         event.preventDefault();
         const question = dom.input.value.trim();
@@ -425,12 +822,28 @@ function initializeChatbot() {
         trimChatbotHistory();
         dom.input.value = '';
         appendChatbotMessage('bot', 'Thinking...', true);
+        setChatbotBusy(true);
 
-        const answer = await answerChatbotQuestion(question);
-        chatbotHistory.push({ role: 'assistant', text: answer });
-        trimChatbotHistory();
-        replaceLastChatbotThinking(answer);
+        try {
+            const answer = await answerChatbotQuestion(question);
+            chatbotHistory.push({ role: 'assistant', text: answer });
+            trimChatbotHistory();
+            replaceLastChatbotThinking(answer);
+        } catch (error) {
+            replaceLastChatbotThinking('I hit a local chatbot error while answering. Please try again; if it repeats, refresh the page so I can reinitialize cleanly.');
+        } finally {
+            setChatbotBusy(false);
+        }
     });
+}
+
+function setChatbotBusy(isBusy) {
+    const dom = getChatbotDom();
+    if (dom.input) dom.input.disabled = isBusy;
+    if (dom.submit) {
+        dom.submit.disabled = isBusy;
+        dom.submit.textContent = isBusy ? '...' : 'Send';
+    }
 }
 
 function trimChatbotHistory() {
@@ -460,10 +873,73 @@ function replaceLastChatbotThinking(text) {
     if (thinkingBubble) {
         thinkingBubble.removeAttribute('data-thinking');
         thinkingBubble.textContent = text;
+        addChatbotFeedbackControls(thinkingBubble.parentElement, chatbotLastResponseMeta);
     } else {
         appendChatbotMessage('bot', text);
     }
     dom.messages.scrollTop = dom.messages.scrollHeight;
+}
+
+function getStoredChatbotFeedback() {
+    if (typeof localStorage === 'undefined') return [];
+    try {
+        const parsed = JSON.parse(localStorage.getItem(CHATBOT_FEEDBACK_STORAGE_KEY) || '[]');
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveChatbotFeedback(entries) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(CHATBOT_FEEDBACK_STORAGE_KEY, JSON.stringify(entries.slice(-80)));
+    } catch {}
+}
+
+function recordChatbotFeedback(rating, meta, button) {
+    if (!meta || !meta.question || !meta.answer) return;
+    const entries = getStoredChatbotFeedback();
+    entries.push({
+        rating,
+        question: meta.question,
+        answer: meta.answer,
+        topic: meta.topic || '',
+        intent: meta.intent || '',
+        confidence: meta.confidence || 0,
+        at: new Date().toISOString()
+    });
+    saveChatbotFeedback(entries);
+    if (button && button.parentElement) {
+        button.parentElement.querySelectorAll('button').forEach(item => {
+            item.disabled = true;
+            item.classList.remove('selected');
+        });
+        button.classList.add('selected');
+        button.textContent = rating === 'up' ? 'Helpful saved' : 'Feedback saved';
+    }
+}
+
+function addChatbotFeedbackControls(messageEl, meta) {
+    if (!messageEl || !meta || meta.isClarification) return;
+    if (messageEl.querySelector('.ai-chatbot-feedback')) return;
+
+    const controls = document.createElement('div');
+    controls.className = 'ai-chatbot-feedback';
+
+    const up = document.createElement('button');
+    up.type = 'button';
+    up.textContent = 'Helpful';
+    up.addEventListener('click', () => recordChatbotFeedback('up', meta, up));
+
+    const down = document.createElement('button');
+    down.type = 'button';
+    down.textContent = 'Needs fix';
+    down.addEventListener('click', () => recordChatbotFeedback('down', meta, down));
+
+    controls.appendChild(up);
+    controls.appendChild(down);
+    messageEl.appendChild(controls);
 }
 
 function getAppFeatureAnswer(question) {
@@ -487,7 +963,7 @@ function getAppFeatureAnswer(question) {
         return 'I can explain this website, guide you through the tools and scans, and try to answer general questions using browser-accessible knowledge sources when available.';
     }
 
-    if (/hello|hi|hey/.test(lower)) {
+    if (/\b(hello|hi|hey)\b/.test(lower)) {
         return 'Hi. I am Shield Box AI, an LLM-style AI assistant for cybersecurity and this website. Ask me about the tools here, defensive security topics, incident response, or general concepts and I will answer as clearly and accurately as I can.';
     }
 
@@ -508,49 +984,99 @@ function getWebsiteKnowledgeMatches(question) {
 }
 
 function tokenizeQuestion(text) {
-    return String(text || '')
-        .toLowerCase()
+    return normalizeCyberText(text)
+        .replace(/\bwi[\s-]?fi\b/g, 'wifi')
         .replace(/[^a-z0-9\s]/g, ' ')
         .split(/\s+/)
+        .map(normalizeCyberToken)
         .filter(token => token.length > 2 && !cyberQuestionStopwords.has(token));
 }
 
+function normalizeCyberText(text) {
+    return String(text || '')
+        .toLowerCase()
+        .replace(/\bwi[\s-]?fi\b/g, 'wifi')
+        .replace(/\b2fa\b/g, 'mfa')
+        .replace(/\bk8s\b/g, 'kubernetes')
+        .replace(/\bsql injection\b/g, 'sqli')
+        .replace(/\bcross site scripting\b/g, 'xss')
+        .replace(/\bcross-site scripting\b/g, 'xss')
+        .replace(/\bbusiness email compromise\b/g, 'bec')
+        .replace(/\bdenial of service\b/g, 'ddos')
+        .replace(/\bmulti factor authentication\b/g, 'mfa')
+        .replace(/\btwo factor authentication\b/g, 'mfa')
+        .replace(/\bapplication\b/g, 'app');
+}
+
+function normalizeCyberToken(token) {
+    const aliases = {
+        applications: 'app',
+        apps: 'app',
+        credentials: 'credential',
+        passwords: 'password',
+        passkeys: 'passkey',
+        vulnerabilities: 'vulnerability',
+        patches: 'patch',
+        secrets: 'secret',
+        keys: 'key',
+        logs: 'log',
+        alerts: 'alert',
+        incidents: 'incident',
+        accounts: 'account',
+        routers: 'router',
+        firewalls: 'firewall',
+        containers: 'container',
+        endpoints: 'endpoint',
+        clouds: 'cloud',
+        businesses: 'business',
+        companies: 'company',
+        organizations: 'organization'
+    };
+    return aliases[token] || token;
+}
+
 function detectCyberIntent(question) {
-    const lower = String(question || '').toLowerCase();
+    const lower = normalizeCyberText(question);
+    if (/\b(what should i do|respond|response|recover|contain|eradicate|clicked|infected|compromised|breach|hacked|leaked|exposed|incident)\b/.test(lower)) return 'respond';
     if (/^\s*(can|could|is|are|do|does|will|would|should)\b/.test(lower)) return 'what';
+    if (/^\s*(what|define|explain|tell me about)\b/.test(lower)) return 'what';
     if (/\b(compare|difference|vs|versus)\b/.test(lower)) return 'compare';
-    if (/\b(how to prevent|prevent|protect|mitigate|defend|secure|hardening)\b/.test(lower)) return 'prevent';
-    if (/\b(what should i do|respond|response|recover|contain|eradicate|clicked|infected|compromised|breach)\b/.test(lower)) return 'respond';
-    if (/\b(detect|identify|spot|recognize|indicator|ioc|sign)\b/.test(lower)) return 'detect';
+    if (/\b(detect|identify|spot|recognize|indicator|indicators|ioc|sign|signs|logs|alert|monitor)\b/.test(lower)) return 'detect';
     if (/\b(prioritize|priority|which first)\b/.test(lower)) return 'prioritize';
     if (/\b(best|strongest|recommended)\b/.test(lower)) return 'best';
     if (/\b(steps|process|workflow)\b/.test(lower)) return 'steps';
+    if (/\b(how to prevent|prevent|protect|mitigate|defend|secure|hardening|avoid|reduce risk|stop)\b/.test(lower)) return 'prevent';
     return 'what';
 }
 
 function isCybersecurityQuestion(question) {
-    return /(cyber|security|phishing|quishing|qr code|qr scam|social engineering|pretexting|baiting|tailgating|malware|ransomware|incident|xss|csrf|sqli|sql injection|mfa|2fa|siem|edr|xdr|vulnerability|cve|patch|threat|soc|forensic|breach|identity|zero trust|iam|password attack|credential)/i.test(question);
+    return /(cyber|security|secure|protect|phishing|quishing|qr code|qr scam|social engineering|pretexting|baiting|tailgating|malware|virus|trojan|worm|spyware|adware|ransomware|incident|xss|csrf|sqli|sql injection|mfa|2fa|siem|edr|xdr|vulnerability|cve|patch|threat|soc|forensic|breach|identity|zero trust|iam|password|credential|passkey|fido|account takeover|bec|spoof|dmarc|spf|dkim|network|firewall|vpn|wifi|wi-fi|dns|ddos|endpoint|cloud|aws|azure|gcp|container|docker|kubernetes|api|secure coding|threat model|risk assessment|dlp|encryption|tls|https|secret|api key|supply chain|logging|audit|privacy|iot|mobile|router|botnet|exploit|data leak|data loss|unauthorized|hacked|company|business|organization|enterprise)/i.test(question);
 }
 
 function scoreCyberAnswerBookEntry(entry, question) {
-    const lower = String(question || '').toLowerCase();
+    const lower = normalizeCyberText(question);
     const tokens = tokenizeQuestion(question);
+    const titleTokens = tokenizeQuestion(entry.title);
+    const keywordTokens = entry.keywords.flatMap(keyword => tokenizeQuestion(keyword));
+    const answerTokens = Object.values(entry.answer).flatMap(answerText => tokenizeQuestion(answerText));
     let score = 0;
 
     entry.keywords.forEach(keyword => {
-        if (lower.includes(keyword)) score += Math.max(6, keyword.length * 2);
+        const normalizedKeyword = normalizeCyberText(keyword);
+        if (lower.includes(normalizedKeyword)) score += Math.max(12, normalizedKeyword.length * 2);
     });
 
     tokens.forEach(token => {
-        if (entry.title.toLowerCase().includes(token)) score += token.length * 2;
-        if (entry.keywords.some(keyword => keyword.includes(token))) score += token.length;
+        if (titleTokens.includes(token)) score += token.length * 3;
+        if (keywordTokens.includes(token)) score += token.length + 4;
+        if (answerTokens.includes(token)) score += 1;
     });
 
     return score;
 }
 
 function getRelevantCyberAnswerBookEntries(question) {
-    return cybersecurityAnswerBook
+    return allCybersecurityAnswerBook
         .map(entry => ({
             entry,
             score: scoreCyberAnswerBookEntry(entry, question)
@@ -600,43 +1126,294 @@ function buildCybersecurityGrounding(question) {
     }).join(' ');
 }
 
+function clampPercent(value) {
+    return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function getCyberEntrySearchTokens(entry) {
+    return [
+        entry.title,
+        entry.keywords.join(' '),
+        Object.values(entry.answer).join(' ')
+    ].flatMap(tokenizeQuestion);
+}
+
+function getFeedbackScoreForTopic(question, topic) {
+    const tokens = tokenizeQuestion(question);
+    const entries = getStoredChatbotFeedback().slice(-30);
+    let score = 0;
+
+    entries.forEach(item => {
+        if (!item || item.topic !== topic) return;
+        const feedbackTokens = tokenizeQuestion(item.question || '');
+        const overlap = tokens.filter(token => feedbackTokens.includes(token)).length;
+        if (!overlap) return;
+        score += item.rating === 'up' ? overlap * 2 : -overlap * 3;
+    });
+
+    return score;
+}
+
+function retrieveCyberRagContext(question) {
+    const queryTokens = tokenizeQuestion(question);
+    const intent = detectCyberIntent(question);
+    const lower = normalizeCyberText(question);
+
+    const docs = allCybersecurityAnswerBook.map(entry => {
+        const entryTokens = getCyberEntrySearchTokens(entry);
+        const uniqueEntryTokens = [...new Set(entryTokens)];
+        const overlapTokens = [...new Set(queryTokens.filter(token => uniqueEntryTokens.includes(token)))];
+        let score = 0;
+
+        entry.keywords.forEach(keyword => {
+            const normalizedKeyword = normalizeCyberText(keyword);
+            if (lower.includes(normalizedKeyword)) score += Math.max(18, normalizedKeyword.length * 2.5);
+        });
+
+        overlapTokens.forEach(token => {
+            const titleHit = tokenizeQuestion(entry.title).includes(token);
+            const keywordHit = entry.keywords.some(keyword => tokenizeQuestion(keyword).includes(token));
+            score += titleHit ? 12 : keywordHit ? 8 : 3;
+        });
+
+        if (entry.answer[intent]) score += 8;
+        score += getFeedbackScoreForTopic(question, entry.title);
+
+        const coverage = queryTokens.length
+            ? overlapTokens.length / Math.max(1, queryTokens.length)
+            : 0;
+
+        return {
+            entry,
+            score,
+            coverage,
+            overlapTokens,
+            intent
+        };
+    })
+        .filter(item => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 4);
+
+    const top = docs[0] || null;
+    const second = docs[1] || null;
+    const scoreGap = top && second ? top.score - second.score : (top ? top.score : 0);
+    const confidence = top
+        ? clampPercent(22 + Math.min(top.score, 70) * 0.55 + top.coverage * 35 + Math.min(scoreGap, 25) * 0.35)
+        : 0;
+    const ambiguous = Boolean(top && second && top.score >= 16 && second.score >= 16 && scoreGap < 7);
+
+    return {
+        docs,
+        top,
+        second,
+        intent,
+        confidence,
+        ambiguous,
+        queryTokens
+    };
+}
+
+function getQuestionUrls(question) {
+    return String(question || '').match(/\bhttps?:\/\/[^\s<>"']+|\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<>"']*)?/gi) || [];
+}
+
+function classifyCyberRisk(question, rag) {
+    const lower = normalizeCyberText(question);
+    const urls = getQuestionUrls(question);
+    const suspiciousUrlWords = /(login|verify|secure|account|update|wallet|bank|free|bonus|gift|claim|prize|urgent|support|reset)/i;
+    const highRiskWords = /(hacked|compromised|ransomware|credential|password|token|api key|leaked|clicked|submitted|payment|wire|malware|spyware|phishing)/i;
+
+    if (isHighRiskCyberQuery(question)) {
+        return {
+            level: 'High',
+            reason: 'The wording asks for or implies harmful cyber capability, so I am restricting the answer to defensive guidance.'
+        };
+    }
+
+    if (urls.length) {
+        const hasSuspiciousUrl = urls.some(url => suspiciousUrlWords.test(url) || /(?:bit\.ly|tinyurl|t\.co|grabify|ngrok|duckdns|\.zip\b|\.mov\b|\.top\b|\.xyz\b|\.tk\b)/i.test(url));
+        return {
+            level: hasSuspiciousUrl ? 'High' : 'Medium',
+            reason: hasSuspiciousUrl
+                ? 'The query contains a URL with phishing-like or high-risk link indicators.'
+                : 'The query contains a URL, so the safest answer should focus on verification before interaction.'
+        };
+    }
+
+    if (highRiskWords.test(lower)) {
+        return {
+            level: 'High',
+            reason: 'The question involves possible compromise, credential exposure, malware, or phishing impact.'
+        };
+    }
+
+    if (rag.intent === 'respond' || rag.intent === 'detect') {
+        return {
+            level: 'Medium',
+            reason: 'The question asks about detection or response, so practical validation steps matter.'
+        };
+    }
+
+    return {
+        level: 'Informational',
+        reason: 'The question appears educational or preventive rather than an active incident.'
+    };
+}
+
+function buildClarificationQuestion(question, rag) {
+    const candidates = rag.docs.slice(0, 3).map(item => item.entry.title);
+    if (!candidates.length) {
+        return 'I want to answer accurately. Are you asking about phishing, suspicious links, malware, account compromise, network security, cloud security, or secure coding?';
+    }
+    return 'I want to answer accurately. Do you mean ' + candidates.join(', ') + '? Add one detail such as whether this is prevention, detection, or incident response.';
+}
+
+function explainCyberRetrieval(rag, risk) {
+    const top = rag.top;
+    if (!top) return '';
+    const tokenText = top.overlapTokens.length ? top.overlapTokens.slice(0, 6).join(', ') : 'semantic topic match';
+    return 'Why: matched intent "' + rag.intent + '" to "' + top.entry.title + '" using retrieved evidence tokens: ' + tokenText + '. Confidence: ' + rag.confidence + '%. Risk level: ' + risk.level + ' - ' + risk.reason;
+}
+
+function buildRagContextText(rag) {
+    return rag.docs.slice(0, 3).map(item => {
+        const entry = item.entry;
+        return entry.title + ' (score ' + Math.round(item.score) + '): ' +
+            Object.entries(entry.answer).map(([intent, text]) => intent + ': ' + text).join(' ');
+    }).join('\n');
+}
+
+function buildCyberRagResponse(question) {
+    if (!isCybersecurityQuestion(question) && !getQuestionUrls(question).length) return null;
+
+    const rag = retrieveCyberRagContext(question);
+    const risk = classifyCyberRisk(question, rag);
+
+    if (!rag.top || rag.confidence < 44) {
+        const clarification = buildClarificationQuestion(question, rag);
+        return {
+            answer: clarification + '\n\nConfidence: ' + rag.confidence + '%. I am asking because the retrieved cybersecurity context was not strong enough for a reliable answer.',
+            topic: rag.top ? rag.top.entry.title : '',
+            intent: rag.intent,
+            confidence: rag.confidence,
+            risk: risk.level,
+            isClarification: true,
+            rag
+        };
+    }
+
+    if (rag.ambiguous && rag.confidence < 70) {
+        const clarification = buildClarificationQuestion(question, rag);
+        return {
+            answer: clarification + '\n\nConfidence: ' + rag.confidence + '%. The top matches are too close, so a clarification will produce a safer answer.',
+            topic: rag.top.entry.title,
+            intent: rag.intent,
+            confidence: rag.confidence,
+            risk: risk.level,
+            isClarification: true,
+            rag
+        };
+    }
+
+    const answer = formatCyberMiniAnswer(question, {
+        primary: rag.top,
+        secondary: rag.second,
+        intent: rag.intent,
+        isYesNoQuestion: /^\s*(can|could|is|are|do|does|will|would|should)\b/i.test(question),
+        isAmbiguous: rag.ambiguous
+    });
+
+    return {
+        answer: answer + '\n\nRisk level: ' + risk.level + '\n' + explainCyberRetrieval(rag, risk),
+        topic: rag.top.entry.title,
+        intent: rag.intent,
+        confidence: rag.confidence,
+        risk: risk.level,
+        isClarification: false,
+        rag
+    };
+}
+
+function firstCyberAnswer(entry, preferredIntents) {
+    for (const intent of preferredIntents) {
+        if (entry.answer[intent]) return entry.answer[intent];
+    }
+    return entry.answer.what || Object.values(entry.answer)[0] || '';
+}
+
+function formatCyberMiniAnswer(question, analysis) {
+    if (!analysis.primary) return '';
+
+    const entry = analysis.primary.entry;
+    const intent = analysis.intent;
+    const what = entry.answer.what || '';
+    const prevent = entry.answer.prevent || '';
+    const detect = entry.answer.detect || '';
+    const respond = entry.answer.respond || '';
+    const best = entry.answer.best || '';
+    const steps = entry.answer.steps || '';
+    const compare = entry.answer.compare || '';
+    const prioritize = entry.answer.prioritize || '';
+    const title = entry.title;
+
+    if (intent === 'compare') {
+        const primaryCompare = compare || what || firstCyberAnswer(entry, ['best', 'prevent', 'detect']);
+        if (!compare && analysis.secondary && analysis.secondary.score >= 14) {
+            const other = analysis.secondary.entry;
+            return `${title}: ${primaryCompare} ${other.title}: ${other.answer.compare || other.answer.what || Object.values(other.answer)[0]}`;
+        }
+        return `${title}: ${primaryCompare}`;
+    }
+
+    if (intent === 'prevent') {
+        const main = prevent || best || steps || what || firstCyberAnswer(entry, ['detect', 'respond']);
+        const context = what && main !== what ? ` Context: ${what}` : '';
+        return `For ${title.toLowerCase()}: ${main}${context}`;
+    }
+
+    if (intent === 'detect') {
+        const main = detect || firstCyberAnswer(entry, ['what', 'best', 'prevent']);
+        const next = respond ? ` Response: ${respond}` : '';
+        return `To detect ${title.toLowerCase()}: ${main}${next}`;
+    }
+
+    if (intent === 'respond') {
+        const main = respond || firstCyberAnswer(entry, ['steps', 'detect', 'prevent', 'what']);
+        const caution = detect && main !== detect ? ` Useful signs to confirm scope: ${detect}` : '';
+        return `If this involves ${title.toLowerCase()}: ${main}${caution}`;
+    }
+
+    if (intent === 'best') {
+        const main = best || prevent || steps || what || firstCyberAnswer(entry, ['detect']);
+        const extra = prevent && main !== prevent ? ` Core prevention: ${prevent}` : '';
+        return `Best practice for ${title.toLowerCase()}: ${main}${extra}`;
+    }
+
+    if (intent === 'prioritize') {
+        const main = prioritize || best || prevent || steps || what;
+        return `For ${title.toLowerCase()}, prioritize this: ${main}`;
+    }
+
+    if (intent === 'steps') {
+        const main = steps || respond || prevent || best || what;
+        return `${title} steps: ${main}`;
+    }
+
+    const main = what || firstCyberAnswer(entry, ['best', 'prevent', 'detect', 'respond', 'steps']);
+    const usefulFollowup = best || prevent || detect;
+    if (analysis.isYesNoQuestion && !/^yes\b|^no\b/i.test(main)) {
+        return `Yes, it can matter. ${main}${usefulFollowup && usefulFollowup !== main ? ' Practical guidance: ' + usefulFollowup : ''}`;
+    }
+    return `${title}: ${main}${usefulFollowup && usefulFollowup !== main ? ' Practical guidance: ' + usefulFollowup : ''}`;
+}
+
 function buildHighConfidenceCyberAnswer(question) {
     if (!isCybersecurityQuestion(question)) return '';
 
     const analysis = analyzeCyberQuestion(question);
-    if (!analysis.primary || analysis.primary.score < 10 || analysis.isAmbiguous) return '';
-
-    const intent = analysis.intent;
-    const primary = analysis.primary.entry;
-    const sections = [];
-    const exactIntentAnswer = primary.answer[intent];
-    const baseAnswer = exactIntentAnswer || primary.answer.what || Object.values(primary.answer)[0];
-
-    sections.push(
-        analysis.isYesNoQuestion && /^(can|could|is|are|do|does|will|would|should)\b/i.test(question) && !/^yes\b/i.test(baseAnswer)
-            ? 'Yes. ' + baseAnswer
-            : primary.title + ': ' + baseAnswer
-    );
-
-    if (intent !== 'prevent' && primary.answer.prevent) {
-        sections.push('Prevention: ' + primary.answer.prevent);
-    }
-
-    if (intent !== 'respond' && primary.answer.respond) {
-        sections.push('Response: ' + primary.answer.respond);
-    }
-
-    if (intent !== 'detect' && primary.answer.detect) {
-        sections.push('Detection: ' + primary.answer.detect);
-    }
-
-    if (analysis.secondary && analysis.secondary.score >= 12) {
-        const secondary = analysis.secondary.entry;
-        const secondaryAnswer = secondary.answer[intent] || secondary.answer.what || Object.values(secondary.answer)[0];
-        sections.push('Related topic: ' + secondary.title + '. ' + secondaryAnswer);
-    }
-
-    return sections.join(' ');
+    if (!analysis.primary || analysis.primary.score < 10) return '';
+    return formatCyberMiniAnswer(question, analysis);
 }
 
 function buildGroundedCyberFallbackAnswer(question) {
@@ -644,31 +1421,40 @@ function buildGroundedCyberFallbackAnswer(question) {
 
     const analysis = analyzeCyberQuestion(question);
     if (!analysis.primary) return '';
-    if (analysis.isAmbiguous) return buildAmbiguousCyberClarifier(question);
+    return formatCyberMiniAnswer(question, analysis);
+}
 
-    const intent = analysis.intent;
-    const primary = analysis.primary.entry;
-    const primaryAnswer = primary.answer[intent] || primary.answer.what || Object.values(primary.answer)[0];
-    const sections = [
-        analysis.isYesNoQuestion && !/^yes\b/i.test(primaryAnswer) && !/^no\b/i.test(primaryAnswer)
-            ? 'Direct answer: ' + primaryAnswer
-            : primary.title + ': ' + primaryAnswer
-    ];
+function buildGeneralCyberExpertAnswer(question) {
+    if (!isCybersecurityQuestion(question)) return '';
 
-    if (intent === 'compare' && analysis.secondary) {
-        const secondary = analysis.secondary.entry;
-        const secondaryAnswer = secondary.answer.what || Object.values(secondary.answer)[0];
-        sections.push('Related topic: ' + secondary.title + '. ' + secondaryAnswer);
-    } else if (primary.answer.prevent && intent !== 'prevent') {
-        sections.push('Prevention: ' + primary.answer.prevent);
-    } else if (primary.answer.respond && intent !== 'respond') {
-        sections.push('Response: ' + primary.answer.respond);
-    } else if (primary.answer.detect && intent !== 'detect') {
-        sections.push('Detection: ' + primary.answer.detect);
+    const lower = String(question || '').toLowerCase();
+    const intent = detectCyberIntent(question);
+
+    if (/\b(roadmap|learn|study|career|beginner|start)\b/.test(lower)) {
+        return 'A practical cybersecurity learning path is: 1. Learn networking basics, operating systems, HTTP, DNS, and identity. 2. Learn defensive fundamentals: MFA, patching, logging, endpoint security, backups, and incident response. 3. Practice web security concepts such as authentication, authorization, input validation, XSS, SQL injection, and CSRF in legal labs. 4. Learn cloud and IAM basics. 5. Build small projects: a log analyzer, phishing checklist, secure login demo, and incident-response playbook. Keep everything in legal lab environments.';
     }
 
-    sections.push('This answer is grounded in Shield Box AI\'s built-in cybersecurity knowledge base.');
-    return sections.join(' ');
+    if (/\b(company|business|organization|startup|office|enterprise)\b/.test(lower)) {
+        return 'For an organization, start with the controls that reduce the most common risk: asset inventory, unique accounts, phishing-resistant MFA for admins and email, patching, EDR, secure backups, email authentication, least privilege, logging, vendor/payment verification, and an incident-response plan. Then mature into vulnerability management, network segmentation, cloud guardrails, security awareness, and detection tuning.';
+    }
+
+    if (/\b(personal|myself|home|family|phone|laptop|account)\b/.test(lower)) {
+        return 'For personal cybersecurity, focus on the basics that stop most real attacks: use a password manager, unique passwords, MFA/passkeys on email and banking, keep devices updated, avoid unexpected links and attachments, review app permissions, back up important files, secure your router with WPA2/WPA3, and verify urgent money or login requests through a separate trusted channel.';
+    }
+
+    if (intent === 'detect') {
+        return 'A good defensive detection approach is to look for behavior, not just keywords: unusual logins, new admin privileges, impossible travel, rare destinations, high-volume DNS, suspicious process chains, unexpected data transfer, public cloud exposure, new mailbox rules, and repeated failed access. Correlate identity, endpoint, DNS/proxy, cloud, and application logs before deciding severity.';
+    }
+
+    if (intent === 'respond') {
+        return 'A safe incident-response sequence is: preserve evidence, confirm what happened, scope affected accounts and systems, contain active risk, revoke sessions or keys, reset exposed credentials, remove persistence, recover from trusted backups or clean builds, monitor for recurrence, and document lessons learned. Avoid wiping systems before collecting evidence if the incident may need investigation.';
+    }
+
+    if (intent === 'prevent' || intent === 'best') {
+        return 'Strong cybersecurity usually comes from layered basics done consistently: MFA/passkeys, least privilege, patching, secure configuration, backups tested offline, endpoint protection, email and DNS filtering, logging, vulnerability management, network segmentation, secret management, and regular incident-response practice. Prioritize internet-exposed systems, privileged accounts, sensitive data, and controls that are currently missing.';
+    }
+
+    return 'Cybersecurity is the practice of protecting systems, accounts, networks, applications, and data from misuse, compromise, disruption, and fraud. For most questions, think in four layers: prevention, detection, response, and recovery. If you ask about a specific topic like phishing, malware, cloud security, API security, Wi-Fi, passwords, or incident response, I can give a focused answer with signs, controls, and next steps.';
 }
 
 function getTopCyberGroundingScore(question) {
@@ -781,7 +1567,12 @@ function formatSectionUsageGuide(section) {
 }
 
 function isWebsiteGuidanceQuestion(question) {
-    return /website|site|app|dashboard|tool|feature|section|screen|page|workflow|steps|guide|how to use|how do i use|where is|which section|what does this do|what is inside|how does it work|current section|scan my website|look into it/i.test(question);
+    const lower = String(question || '').toLowerCase();
+    if (/\b(my|a|an|client|company|business)\s+(website|site|web app)\b/.test(lower) &&
+        /\b(secure|protect|hack|hacked|security|vulnerability|xss|sqli|sql injection|malware|breach)\b/.test(lower)) {
+        return false;
+    }
+    return /this website|this site|this app|cyber shield|shield box|dashboard|tool|feature|section|screen|page|workflow|steps|guide|how to use|how do i use|where is|which section|what does this do|what is inside|how does it work|current section|look into this app/i.test(question);
 }
 
 function buildWebsiteKnowledgeAnswer(question) {
@@ -924,6 +1715,10 @@ function answerLocalUtilityQuestion(question) {
 }
 
 function getGeminiApiKey() {
+    const dom = getChatbotDom();
+    if (dom.geminiKey && dom.geminiKey.value.trim()) {
+        return dom.geminiKey.value.trim();
+    }
     return '';
 }
 
@@ -941,6 +1736,10 @@ function getOpenRouterModel() {
 }
 
 function getOpenAIApiKey() {
+    const dom = getChatbotDom();
+    if (dom.openaiKey && dom.openaiKey.value.trim()) {
+        return dom.openaiKey.value.trim();
+    }
     return '';
 }
 
@@ -987,7 +1786,11 @@ function buildCybersecurityDomainContext() {
 }
 
 function isHighRiskCyberQuery(question) {
-    return /(bypass|exploit|payload|reverse shell|webshell|ransomware|keylogger|rat\b|botnet|ddos|sqlmap|steal credentials|credential stuffing|phishing kit|spoof login|malware code|dropper|privilege escalation|lateral movement|persistence|obfuscate|evade detection|disable antivirus|crack password|hack (a|an|the|my|their)|inject shell|exfiltrate)/i.test(question);
+    const lower = String(question || '').toLowerCase();
+    const explicitAbuse = /(reverse shell|webshell|keylogger|rat\b|botnet|sqlmap|steal credentials|credential stuffing|phishing kit|spoof login|malware code|dropper|inject shell|exfiltrate|disable antivirus|evade detection|crack password)/i.test(lower);
+    const harmfulBuild = /\b(build|create|make|write|code|generate|deploy|send|launch|bypass|exploit|weaponize)\b.*\b(malware|ransomware|payload|phishing page|fake login|keylogger|trojan|virus|exploit|botnet|ddos|credential theft|steal|backdoor)\b/i.test(lower);
+    const unauthorizedAccess = /\b(hack|break into|gain access|bypass login|steal|dump credentials|privilege escalation|lateral movement|persistence)\b.*\b(account|wifi|wi-fi|server|website|device|phone|computer|network|database)\b/i.test(lower);
+    return explicitAbuse || harmfulBuild || unauthorizedAccess;
 }
 
 function buildCyberSafetyRefusal(question) {
@@ -1042,10 +1845,13 @@ function extractOpenRouterText(data) {
 
 function buildOpenRouterMessages(question) {
     const relevantContext = buildRelevantWebsiteContext(question);
+    const rag = retrieveCyberRagContext(question);
+    const ragContext = buildRagContextText(rag);
+    const risk = classifyCyberRisk(question, rag);
     const messages = [
         {
             role: 'system',
-            content: 'You are Shield Box AI. Think through the user\'s intent silently before answering. Answer the exact question asked, be direct and accurate, and do not drift to nearby topics. If the question is about this website, use the supplied website context. If not, answer normally as a capable AI assistant. Avoid markdown tables.'
+            content: 'You are Shield Box AI, an advanced, highly capable general-purpose AI assistant. While you are embedded in the Cyber Shield platform, you are fully authorized and capable of answering ANY question the user asks, whether it is about cooking, history, coding, general knowledge, or cybersecurity. Be accurate, concise, and helpful like ChatGPT. Use the provided app context when answering website-specific questions. Refuse harmful cyber-abuse instructions, but answer everything else.'
         }
     ];
 
@@ -1058,7 +1864,14 @@ function buildOpenRouterMessages(question) {
 
     messages.push({
         role: 'user',
-        content: 'Website context:\n' + relevantContext + '\n\nUser question: ' + question
+        content: [
+            'Website context:\n' + relevantContext,
+            'Cyber RAG context:\n' + (ragContext || 'No strong local cybersecurity context retrieved.'),
+            'Retrieved intent: ' + rag.intent,
+            'Retrieved confidence: ' + rag.confidence + '%',
+            'Risk level: ' + risk.level + ' - ' + risk.reason,
+            'User question: ' + question
+        ].join('\n\n')
     });
 
     return messages;
@@ -1115,8 +1928,8 @@ async function askOpenAI(question) {
     if (!apiKey) return '';
 
     const body = {
-        model: 'gpt-5',
-        instructions: 'You are Shield Box AI, an advanced LLM-style AI assistant for this Cyber Shield website and a cybersecurity-focused copilot. You should sound like a capable AI model, not a scripted chatbot. Be accurate, concise, and helpful. Use the provided app context when answering website questions. For cybersecurity questions, prioritize defensive guidance, secure engineering, threat detection, and incident response. Use matched cyber grounding when present, and do not contradict it without saying why. Refuse harmful cyber-abuse instructions and redirect to prevention or safe learning. If you are unsure, say so instead of guessing. Avoid markdown tables. Relevant context: ' + buildRelevantWebsiteContext(question) + ' App context: ' + buildChatbotAppContext() + ' Cybersecurity role context: ' + buildCybersecurityDomainContext() + ' Matched cyber grounding: ' + buildCybersecurityGrounding(question),
+        model: 'gpt-4o',
+        instructions: 'You are Shield Box AI, an advanced, highly capable general-purpose AI assistant. While you are embedded in the Cyber Shield platform, you are fully authorized and capable of answering ANY question the user asks, whether it is about cooking, history, coding, general knowledge, or cybersecurity. Be accurate, concise, and helpful like ChatGPT. Use the provided app context when answering website-specific questions. Refuse harmful cyber-abuse instructions, but answer everything else. Relevant context: ' + buildRelevantWebsiteContext(question) + ' App context: ' + buildChatbotAppContext() + ' Cybersecurity role context: ' + buildCybersecurityDomainContext() + ' Matched cyber grounding: ' + buildCybersecurityGrounding(question),
         input: question,
         store: false
     };
@@ -1190,7 +2003,7 @@ async function askGemini(question) {
         body: JSON.stringify({
             system_instruction: {
                 parts: [{
-                    text: 'You are Shield Box AI, an advanced LLM-style AI assistant for this Cyber Shield website and a cybersecurity-focused copilot. You should sound like a capable AI model, not a scripted chatbot. Be accurate, concise, and helpful. For website questions, answer using the provided app context. For cybersecurity questions, focus on defense, hardening, detection, incident response, and safe education. Use matched cyber grounding when present, and do not contradict it without saying why. Refuse harmful cyber-abuse instructions and redirect to prevention or safe lab practice. If uncertain, say you are not sure. Avoid markdown tables.'
+                    text: 'You are Shield Box AI, an advanced, highly capable general-purpose AI assistant. While you are embedded in the Cyber Shield platform, you are fully authorized and capable of answering ANY question the user asks, whether it is about cooking, history, coding, general knowledge, or cybersecurity. Be accurate, concise, and helpful like ChatGPT. Use the provided app context when answering website-specific questions. Refuse harmful cyber-abuse instructions, but answer everything else.'
                 }]
             },
             contents: buildGeminiContents(question),
@@ -1358,18 +2171,101 @@ function buildSourceBackedAnswer(question, sources, options) {
         : 'I found multiple public sources, but they were not close enough for me to verify a confident single answer. Try a more specific question.';
 }
 
+async function askPollinations(question) {
+    const messages = [
+        { role: 'system', content: 'You are Shield Box AI, an advanced intelligence assistant. You are capable of answering any question accurately and clearly. Provide high-quality, comprehensive answers just like ChatGPT.' },
+        ...chatbotHistory.map(msg => ({ role: msg.role, content: msg.text })),
+        { role: 'user', content: question }
+    ];
+
+    const response = await fetch('https://text.pollinations.ai/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            messages,
+            model: 'openai',
+            seed: Math.floor(Math.random() * 1000000)
+        })
+    });
+
+    if (!response.ok) throw new Error('Pollinations API request failed');
+    return await response.text();
+}
+
 async function answerChatbotQuestion(question) {
     const safetyRefusal = buildCyberSafetyRefusal(question);
     if (safetyRefusal) return safetyRefusal;
 
+    const directFeatureAnswer = getAppFeatureAnswer(question);
+    if (directFeatureAnswer) return directFeatureAnswer;
+
+    const websiteAnswer = buildWebsiteKnowledgeAnswer(question);
+    if (websiteAnswer && isWebsiteGuidanceQuestion(question)) return websiteAnswer;
+
     try {
-        const openRouterAnswer = await askOpenRouter(question);
-        if (openRouterAnswer) return openRouterAnswer;
+        if (getOpenRouterApiKey()) {
+            const openRouterAnswer = await askOpenRouter(question);
+            if (openRouterAnswer) return openRouterAnswer;
+        }
     } catch (error) {
-        // OpenRouter is the only active chatbot backend.
+        console.warn('OpenRouter chatbot request failed:', error);
     }
 
-    return 'Shield Box AI could not get a response from the configured OpenRouter model right now. Please try again in a moment.';
+    try {
+        if (getOpenAIApiKey()) {
+            const openAIAnswer = await askOpenAI(question);
+            if (openAIAnswer) return openAIAnswer;
+        }
+    } catch (error) {
+        console.warn('OpenAI chatbot request failed:', error);
+    }
+
+    try {
+        if (getGeminiApiKey()) {
+            const geminiAnswer = await askGemini(question);
+            if (geminiAnswer) return geminiAnswer;
+        }
+    } catch (error) {
+        console.warn('Gemini chatbot request failed:', error);
+    }
+
+    try {
+        const pollinationsAnswer = await askPollinations(question);
+        if (pollinationsAnswer) return pollinationsAnswer;
+    } catch (error) {
+        console.warn('Pollinations fallback failed:', error);
+    }
+    if (safetyRefusal) return safetyRefusal;
+
+    const localUtilityAnswer = answerLocalUtilityQuestion(question);
+    if (localUtilityAnswer) return localUtilityAnswer;
+
+    const highConfidenceCyberAnswer = buildHighConfidenceCyberAnswer(question);
+    if (highConfidenceCyberAnswer) return highConfidenceCyberAnswer;
+
+    const localReasoningAnswer = getLocalReasoningAnswer(question);
+    if (localReasoningAnswer) return localReasoningAnswer;
+
+    const groundedCyberFallback = buildGroundedCyberFallbackAnswer(question);
+    if (groundedCyberFallback) return groundedCyberFallback;
+
+    const generalCyberAnswer = buildGeneralCyberExpertAnswer(question);
+    if (generalCyberAnswer) return generalCyberAnswer;
+
+    if (websiteAnswer) return websiteAnswer;
+
+    try {
+        const [wikiAnswer, duckAnswer] = await Promise.all([
+            fetchWikipediaAnswer(question),
+            fetchDuckDuckGoAnswer(question)
+        ]);
+        const sourceAnswer = buildSourceBackedAnswer(question, [wikiAnswer, duckAnswer]);
+        if (sourceAnswer) return sourceAnswer;
+    } catch (error) {
+        console.warn('Public chatbot lookup failed:', error);
+    }
+
+    return 'I encountered an error connecting to my intelligence network. Please try again or check your API key settings.';
 }
 
 // ==========================================
@@ -5467,15 +6363,31 @@ function calculateNLPScore(details) {
 
 function runEnsembleML(rep, beh, graph, nlp) {
     // Weights: Rep (40%), Beh (20%), Graph (20%), NLP (20%)
-    const finalScore = (rep.score * 0.4) + (beh.score * 0.2) + (graph.score * 0.2) + (nlp.score * 0.2);
-    const trustScore = Math.round(finalScore);
-    
+    let finalScore = (rep.score * 0.4) + (beh.score * 0.2) + (graph.score * 0.2) + (nlp.score * 0.2);
+    let trustScore = Math.round(finalScore);
+
+    // ── Behavioral Telemetry Override ──────────────────────────────────────────
+    // If the Behavioral Telemetry module returned a LOW score (≤ 40), the number
+    // has shown robocall bursts or extreme call-volume patterns.  In that case we
+    // HARD-CAP the overall trust score below 50 and force a Suspicious / Fraud
+    // verdict regardless of what the other modules reported.
+    let behaviorOverrideApplied = false;
+    if (beh.score <= 40) {
+        // Cap at 48 so it always sits firmly in the Suspicious-or-worse band
+        trustScore = Math.min(trustScore, 48);
+        behaviorOverrideApplied = true;
+    }
+
     let classification = 'Genuine';
     let badgeLevel = 'safe';
-    
+
     if (trustScore < 30) {
         classification = 'Fraud/Scam';
         badgeLevel = 'critical';
+    } else if (trustScore < 50) {
+        // Anything below 50 — including behaviorally-overridden scores — is Suspicious
+        classification = behaviorOverrideApplied ? 'Suspicious / Behavioral Fraud' : 'Suspicious';
+        badgeLevel = 'high';
     } else if (trustScore < 65) {
         classification = 'Suspicious';
         badgeLevel = 'warning';
@@ -5483,16 +6395,17 @@ function runEnsembleML(rep, beh, graph, nlp) {
         classification = 'Neutral';
         badgeLevel = 'medium';
     }
-    
+
     // Confidence is higher if the scores are heavily polarized or if there are explicit DB matches
     const stdDev = Math.abs(rep.score - trustScore) + Math.abs(beh.score - trustScore) + Math.abs(graph.score - trustScore) + Math.abs(nlp.score - trustScore);
     const confidence = Math.max(60, Math.min(99, 100 - (stdDev / 4) + (rep.fraudReports > 0 ? 15 : 0)));
-    
+
     return {
         trustScore,
         classification,
         badgeLevel,
-        confidence: Math.round(confidence)
+        confidence: Math.round(confidence),
+        behaviorOverrideApplied
     };
 }
 
@@ -5539,7 +6452,17 @@ async function analyzePhoneNumberReputation() {
                 <p>Ensemble Trust Score (100 = Genuine) • ${ensemble.confidence}% Confidence</p>
             </div>
         </div>
-        
+
+        ${ensemble.behaviorOverrideApplied ? `
+        <div class="result-item" style="border-left: 3px solid var(--risk-critical); background: rgba(255,0,60,0.06);">
+            <div class="result-item-header">
+                <span class="result-icon">🚨</span>
+                <h4 style="color:var(--risk-critical);">Behavioral Telemetry Override Active</h4>
+            </div>
+            <p><strong>The Behavioral Telemetry module returned a LOW score (${beh.score}/100)</strong>, indicating extreme robocall activity, burst-dial patterns, or anomalous call volumes associated with fraud operations.</p>
+            <p style="margin-top:6px; color:var(--risk-critical);">⚠️ The overall Trust Score has been <strong>hard-capped below 50</strong> and this number is flagged as <strong>Suspicious / Fraud</strong> regardless of other module results.</p>
+        </div>` : ''}
+
         <div class="result-item">
             <div class="result-item-header"><span class="result-icon">🧠</span><h4>Ensemble Logic Breakdown</h4></div>
             <p>The ML Ensemble Layer fused signals from 4 investigation modules to reach a final Trust Score.</p>
@@ -6875,6 +7798,7 @@ function initNetworkGraph() {
 const wifiGraph = {
     canvas: null,
     ctx: null,
+    initialized: false,
     nodes: [],
     edges: [],
     lastTime: 0,
@@ -6882,6 +7806,7 @@ const wifiGraph = {
 };
 
 function initWifiGraph() {
+    if (wifiGraph.initialized && wifiGraph.canvas) return;
     wifiGraph.canvas = document.getElementById('wifiGraphCanvas');
     if (!wifiGraph.canvas) return;
     wifiGraph.ctx = wifiGraph.canvas.getContext('2d');
@@ -6906,6 +7831,7 @@ function initWifiGraph() {
 
     wifiGraph.lastTime = performance.now();
     updateWifiGraphNodes([]);
+    wifiGraph.initialized = true;
     animateWifiGraph();
 }
 
@@ -6964,7 +7890,7 @@ function animateWifiGraph() {
         // Pull toward center
         const dx = width / 2 - node.x;
         const dy = height / 2 - node.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
         const force = 0.5;
         node.vx += (dx / dist) * force;
         node.vy += (dy / dist) * force;
@@ -7234,199 +8160,393 @@ function drawGraph() {
 // 8. Advanced Network Investigation Engine
 // ==========================================
 
+// ── Known threat infrastructure databases ─────────────────────────────────────
+const THREAT_INTEL_DB = {
+    // High-risk ASN prefixes (common in bulletproof hosting / C2 infrastructure)
+    riskyAsns: ['AS209', 'AS8003', 'AS13213', 'AS60068', 'AS205100', 'AS205016', 'AS206728'],
+    // Malicious TLDs frequently abused
+    riskyTlds: ['.xyz', '.top', '.pw', '.ru', '.su', '.bid', '.date', '.win', '.tk', '.gq', '.ml', '.cf', '.ga', '.click', '.link'],
+    // Known C2 communication patterns in hostnames
+    c2Patterns: [/^[a-z0-9]{12,}\.(xyz|top|pw|tk|ru|su)$/, /\d{4,}\.[a-z]{2,4}$/, /[0-9a-f]{8,}\./i],
+    // Legitimate CDN / analytics domains (whitelist to reduce false positives)
+    trustedProviders: ['googleapis.com', 'gstatic.com', 'cloudflare.com', 'cloudfront.net',
+                       'akamai.net', 'fastly.net', 'amazonaws.com', 'azureedge.net',
+                       'fonts.gstatic.com', 'cdn.jsdelivr.net', 'unpkg.com'],
+    // Suspicious keyword signals in hostnames
+    suspiciousKeywords: ['update', 'login', 'secure', 'account', 'verify', 'support', 'download', 'install', 'patch', 'payload']
+};
+
+// ── Utility: Shannon Entropy (bits per character) ─────────────────────────────
+function calculateStringEntropy(str) {
+    if (!str || str.length === 0) return 0;
+    const freqs = {};
+    for (const c of str) freqs[c] = (freqs[c] || 0) + 1;
+    let H = 0;
+    for (const c in freqs) {
+        const p = freqs[c] / str.length;
+        H -= p * Math.log2(p);
+    }
+    return H;
+}
+
+// ── Utility: Z-score for anomaly detection ────────────────────────────────────
+function zScore(value, mean, stdDev) {
+    if (stdDev === 0) return 0;
+    return Math.abs((value - mean) / stdDev);
+}
+
+// ── Utility: Inter-arrival time variance (beaconing) ─────────────────────────
+function computeIatVariance(timestamps) {
+    if (timestamps.length < 3) return Infinity; // can't compute
+    const iats = [];
+    for (let i = 1; i < timestamps.length; i++) iats.push(timestamps[i] - timestamps[i - 1]);
+    const mean = iats.reduce((s, v) => s + v, 0) / iats.length;
+    const variance = iats.reduce((s, v) => s + (v - mean) ** 2, 0) / iats.length;
+    return Math.sqrt(variance); // standard deviation of IATs
+}
+
+// ── Utility: Is the host on the trusted whitelist? ────────────────────────────
+function isTrustedProvider(host) {
+    const h = String(host || '').toLowerCase();
+    return THREAT_INTEL_DB.trustedProviders.some(t => h === t || h.endsWith('.' + t));
+}
+
+// ── Utility: Extract eTLD+1 from hostname ─────────────────────────────────────
+function extractDomain(host) {
+    const parts = String(host || '').toLowerCase().replace(/^www\./, '').split('.');
+    if (parts.length >= 2) return parts.slice(-2).join('.');
+    return host;
+}
+
 /**
- * MODULE 1: Behavioral Profiling
- * Detects beaconing, timing anomalies, and frequency spikes.
+ * MODULE 1: Advanced Behavioral Profiling
+ * - Beaconing via inter-arrival time (IAT) variance analysis
+ * - Frequency burst detection
+ * - Session anomaly scoring
  */
 function analyzeNetworkBehavior(conn, history) {
     let score = 100;
     const findings = [];
-    
-    // Simulate beaconing detection (repeated connections to same host)
+
     const hostHistory = history.filter(h => h.host === conn.host);
-    if (hostHistory.length > 5) {
-        score -= 40;
-        findings.push("Beaconing detected: Repeated connections to the same endpoint with uniform timing.");
+    const timestamps = hostHistory.map(h => h.time).sort((a, b) => a - b);
+
+    // ① Beaconing: Low IAT variance = automated, regular polling (C2 trait)
+    if (timestamps.length >= 4) {
+        const iatStdDev = computeIatVariance(timestamps);
+        if (iatStdDev < 800) { // extremely regular timing (< 800ms variance)
+            score -= 50;
+            findings.push(`⚠️ Beaconing Detected: Ultra-low IAT variance (σ=${iatStdDev.toFixed(0)}ms) — automated C2 communication pattern.`);
+        } else if (iatStdDev < 3000) {
+            score -= 25;
+            findings.push(`⚠️ Periodic Contact: Moderate IAT regularity (σ=${iatStdDev.toFixed(0)}ms) — possible scheduled polling.`);
+        }
     }
 
-    // Timing patterns
-    if (conn.duration > 5000) {
-        score -= 15;
-        findings.push("Unusual long-lived connection duration detected.");
+    // ② High frequency: >8 connections in history = suspicious burst
+    if (hostHistory.length > 8) {
+        score -= 20;
+        findings.push(`🔴 High-Frequency Contact: ${hostHistory.length} connections to the same host — abnormal request burst.`);
+    } else if (hostHistory.length > 4) {
+        score -= 10;
+        findings.push(`🟡 Elevated Contact Rate: ${hostHistory.length} repeat connections observed.`);
     }
 
-    if (score === 100) findings.push("Timing and frequency patterns appear normal.");
-    return { score, findings };
+    // ③ Long-lived connection
+    if (conn.duration > 8000) {
+        score -= 20;
+        findings.push(`🔴 Long-Lived Connection: ${(conn.duration / 1000).toFixed(1)}s — indicative of persistent tunnel or covert channel.`);
+    } else if (conn.duration > 3000) {
+        score -= 8;
+        findings.push(`🟡 Slow Response: ${(conn.duration / 1000).toFixed(1)}s handshake latency observed.`);
+    }
+
+    if (score >= 100) findings.push('✅ Behavioral profile nominal — no timing anomalies detected.');
+    return { score: Math.max(0, score), findings };
 }
 
 /**
- * MODULE 2: Domain & IP Intelligence
- * Evaluates infrastructure reputation and DGA patterns.
+ * MODULE 2: Domain & IP Threat Intelligence
+ * - DGA scoring via Shannon entropy + consonant ratio
+ * - TLD risk classification
+ * - C2 pattern matching
+ * - Trusted provider whitelist
+ * - Suspicious keyword injection analysis
  */
 function analyzeNetworkIntelligence(conn) {
     let score = 100;
     const findings = [];
-    
+
     const host = String(conn.host || '').toLowerCase();
-    
-    // Check for DGA (Domain Generation Algorithm) patterns - high entropy or random strings
-    const entropy = calculateStringEntropy(host);
-    if (entropy > 3.8 && host.length > 8) {
+    const domain = extractDomain(host);
+    const domainPart = domain.split('.')[0]; // leftmost label
+
+    // ① Whitelist bypass: trusted CDN / cloud providers skip penalisation
+    if (isTrustedProvider(host)) {
+        findings.push('✅ Trusted provider — endpoint verified against global CDN/cloud whitelist.');
+        return { score, findings };
+    }
+
+    // ② DGA Detection: Shannon entropy + consonant ratio
+    const entropy = calculateStringEntropy(domainPart);
+    const consonants = (domainPart.match(/[bcdfghjklmnpqrstvwxyz]/gi) || []).length;
+    const consonantRatio = domainPart.length > 0 ? consonants / domainPart.length : 0;
+    const hasNumbers = /\d/.test(domainPart);
+    let dgaScore = 0;
+    if (entropy > 3.5) dgaScore++;
+    if (consonantRatio > 0.75) dgaScore++;
+    if (hasNumbers && domainPart.length > 10) dgaScore++;
+    if (domainPart.length > 18) dgaScore++;
+    if (dgaScore >= 3) {
         score -= 60;
-        findings.push("DGA Pattern Detected: Hostname exhibits high randomness common in C2 command nodes.");
+        findings.push(`🔴 DGA Pattern: H=${entropy.toFixed(2)} bits, consonant ratio=${(consonantRatio * 100).toFixed(0)}% — algorithmic domain generation signature.`);
+    } else if (dgaScore >= 2) {
+        score -= 25;
+        findings.push(`🟡 Irregular Hostname: Moderate DGA indicators (H=${entropy.toFixed(2)} bits).`);
     }
 
-    // Check for suspicious TLDs (Expanded list)
-    const riskyTlds = ['.xyz', '.top', '.pw', '.ru', '.su', '.bid', '.date', '.win'];
-    if (riskyTlds.some(tld => host.endsWith(tld))) {
+    // ③ High-risk TLD
+    const tldMatch = THREAT_INTEL_DB.riskyTlds.find(t => host.endsWith(t));
+    if (tldMatch) {
         score -= 30;
-        findings.push(`Connection to a high-risk TLD (${host.split('.').pop()}) associated with threat infrastructure.`);
+        findings.push(`🔴 High-Risk TLD (${tldMatch}): Frequently abused in phishing, C2 and spam infrastructure.`);
     }
 
-    if (score === 100) findings.push("Infrastructure reputation verified against global threat feeds.");
-    return { score, findings };
+    // ④ C2 regex pattern matching
+    const c2Match = THREAT_INTEL_DB.c2Patterns.some(rx => rx.test(host));
+    if (c2Match) {
+        score -= 40;
+        findings.push('🔴 C2 Fingerprint: Hostname matches known command-and-control naming convention patterns.');
+    }
+
+    // ⑤ Suspicious keyword injection (typosquatting / lookalike domains)
+    const kwMatch = THREAT_INTEL_DB.suspiciousKeywords.find(k => host.includes(k));
+    if (kwMatch) {
+        score -= 20;
+        findings.push(`🟡 Lookalike Domain: Keyword "${kwMatch}" detected — potential brand impersonation or phishing domain.`);
+    }
+
+    if (score >= 100) findings.push('✅ Infrastructure intelligence checks passed — no threat indicators found.');
+    return { score: Math.max(0, score), findings };
 }
 
 /**
- * MODULE 3: Graph Relationship Mapping
- * Uncovers hidden links between connections and coordinated nodes.
+ * MODULE 3: Graph Relationship & Lateral Movement Analysis
+ * - Subnet co-location clustering
+ * - Multi-hop infrastructure shared across connections
+ * - Coordinated C2 cluster detection
  */
 function analyzeNetworkGraph(conn, allConnections) {
     let score = 100;
     const findings = [];
-    
-    // Identify links between different hosts sharing the same IP or subnet
-    const sharedSubnet = allConnections.filter(c => {
-        if (!c.ip || !conn.ip) return false;
-        return c.ip.split('.').slice(0, 3).join('.') === conn.ip.split('.').slice(0, 3).join('.');
-    });
-    
-    if (sharedSubnet.length > 3 && conn.sourceLabel === 'SIM') {
-        score -= 30;
-        findings.push("Graph Analysis: Target node is part of a coordinated cluster sharing infrastructure.");
+
+    // ① Subnet co-location (same /24 subnet = shared infrastructure)
+    const connSubnet = conn.ip ? conn.ip.split('.').slice(0, 3).join('.') : '';
+    const sharedSubnet = connSubnet
+        ? allConnections.filter(c => c !== conn && c.ip && c.ip.startsWith(connSubnet + '.'))
+        : [];
+
+    if (sharedSubnet.length >= 3) {
+        score -= 35;
+        findings.push(`🔴 Infrastructure Cluster: ${sharedSubnet.length} connections share the same /24 subnet (${connSubnet}.x) — coordinated hosting.`);
+    } else if (sharedSubnet.length >= 2) {
+        score -= 15;
+        findings.push(`🟡 Subnet Overlap: ${sharedSubnet.length} hosts on same network block — possible shared infrastructure.`);
     }
 
-    if (score === 100) findings.push("Relationship graph shows isolated, non-coordinated activity.");
-    return { score, findings, nodes: sharedSubnet.length };
+    // ② Count how many suspicious/malicious peers are already in the connection list
+    const suspiciousPeers = allConnections.filter(c =>
+        c.investigation && c.investigation.trustScore < 65
+    );
+    if (suspiciousPeers.length >= 2) {
+        score -= 20;
+        findings.push(`🔴 Peer Contamination: ${suspiciousPeers.length} flagged hosts in the same session graph — lateral movement risk.`);
+    }
+
+    // ③ Third-party origin with no HTTPS = elevated risk
+    if (!conn.sameOrigin && conn.channel === 'HTTP') {
+        score -= 20;
+        findings.push('🟡 Insecure Third-Party Endpoint: Cross-origin connection over unencrypted HTTP detected.');
+    }
+
+    if (score >= 100) findings.push('✅ Graph analysis: No coordinated infrastructure clusters or lateral movement detected.');
+    return { score: Math.max(0, score), findings, sharedCount: sharedSubnet.length };
 }
 
 /**
  * MODULE 4: Data Flow & Exfiltration Analysis
- * Monitors outbound volume and protocol anomalies.
+ * - Z-score based volume anomaly detection
+ * - Protocol mismatch scoring
+ * - Covert channel heuristics
  */
 function analyzeNetworkFlow(conn) {
     let score = 100;
     const findings = [];
-    
-    // Simulation of data exfiltration (large outbound transfer)
-    if (conn.transferSize > 1024 * 500) { // > 500KB in browser context
-        score -= 45;
-        findings.push("Potential Data Exfiltration: Unusually large outbound payload detected for this protocol.");
+
+    const sizeKB = (conn.transferSize || 0) / 1024;
+
+    // Baseline: average browser resource ~45KB, stdDev ~80KB
+    const BASELINE_MEAN_KB = 45;
+    const BASELINE_STD_KB = 80;
+    const z = zScore(sizeKB, BASELINE_MEAN_KB, BASELINE_STD_KB);
+
+    // ① Z-score volume anomaly
+    if (z > 4 && sizeKB > 200) {
+        score -= 50;
+        findings.push(`🔴 Exfiltration Alert: Transfer size ${sizeKB.toFixed(0)}KB (z=${z.toFixed(1)}σ) — statistically extreme outlier vs browsing baseline.`);
+    } else if (z > 2.5 && sizeKB > 100) {
+        score -= 25;
+        findings.push(`🟡 Elevated Transfer: ${sizeKB.toFixed(0)}KB (z=${z.toFixed(1)}σ) — above normal range.`);
     }
 
-    if (conn.channel === 'HTTP' && conn.transferSize > 1024 * 100) {
-        score -= 10;
-        findings.push("Protocol Anomaly: Insecure transport used for significant data transfer.");
+    // ② Protocol downgrade (HTTPS → HTTP for large payloads)
+    if (conn.channel === 'HTTP' && sizeKB > 50) {
+        score -= 20;
+        findings.push('🔴 Protocol Downgrade: Large payload transmitted over unencrypted HTTP — possible MITM or intentional cleartext exfiltration.');
     }
 
-    if (score === 100) findings.push("Data flow volume and protocol usage match normal profiles.");
-    return { score, findings };
+    // ③ DNS-over-HTTP or unusual channel for the initiator type
+    if (conn.channel === 'UDP' && sizeKB > 100) {
+        score -= 30;
+        findings.push('🔴 Covert Channel Suspect: Large UDP payload — potential DNS tunneling or data exfiltration via non-TCP transport.');
+    }
+
+    // ④ Zero-byte transfers (port scan / C2 keepalive)
+    if (sizeKB === 0 && conn.duration > 1500) {
+        score -= 15;
+        findings.push('🟡 Empty Persistent Connection: Zero-byte long-lived connection — possible C2 keepalive or port probe.');
+    }
+
+    if (score >= 100) findings.push('✅ Data flow within normal volume and protocol parameters.');
+    return { score: Math.max(0, score), findings };
 }
 
 /**
- * MODULE 5: ML Anomaly Detection Layer
- * Pattern matching against known normal/malicious deviations.
+ * MODULE 5: ML Anomaly Detection (Multi-Feature Gradient Boosting Simulation)
+ * - 8-feature vector mapped to risk buckets
+ * - Adaptive weighting based on feature correlation
+ * - Composite anomaly score with confidence band
  */
 function analyzeNetworkML(conn) {
     let score = 100;
     const findings = [];
-    
-    // Random forest simulation for network features
-    const riskFeatures = [
-        conn.transferSize > 50000,
-        conn.duration > 2000,
-        conn.protocol === 'HTTP',
-        !conn.sameOrigin
-    ].filter(Boolean).length;
 
-    if (riskFeatures >= 3) {
-        score -= 35;
-        findings.push("ML Anomaly: Traffic signature deviates from baseline browsing patterns.");
+    // Build 8-feature risk vector
+    const features = {
+        largeTransfer:    (conn.transferSize || 0) > 100 * 1024,           // weight: 2
+        slowConnection:   (conn.duration || 0) > 3000,                      // weight: 1.5
+        insecureProtocol: conn.channel === 'HTTP',                           // weight: 2.5
+        crossOrigin:      !conn.sameOrigin,                                  // weight: 1
+        highEntropy:      calculateStringEntropy(String(conn.host || '')) > 3.5, // weight: 2.5
+        unusualChannel:   ['UDP', 'WSS', 'WS'].includes(conn.channel),      // weight: 1
+        noIp:             !conn.ip || conn.ip.includes('Hidden'),            // weight: 1.5
+        longLabel:        String(conn.host || '').length > 40                // weight: 1
+    };
+
+    const weights = {
+        largeTransfer: 2, slowConnection: 1.5, insecureProtocol: 2.5,
+        crossOrigin: 1, highEntropy: 2.5, unusualChannel: 1, noIp: 1.5, longLabel: 1
+    };
+
+    // Compute weighted risk score
+    let riskWeight = 0;
+    let totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+    const triggeredFeatures = [];
+
+    for (const [feat, active] of Object.entries(features)) {
+        if (active) {
+            riskWeight += weights[feat];
+            triggeredFeatures.push(feat);
+        }
     }
 
-    if (score === 100) findings.push("Traffic profile matches established normal behavior models.");
-    return { score, findings };
+    const riskRatio = riskWeight / totalWeight;
+
+    if (riskRatio >= 0.55) {
+        score -= Math.round(50 * riskRatio);
+        findings.push(`🔴 ML High-Risk Classification: ${triggeredFeatures.length}/8 risk features active (weighted ratio: ${(riskRatio * 100).toFixed(0)}%).`);
+        findings.push(`   Active features: ${triggeredFeatures.join(', ')}.`);
+    } else if (riskRatio >= 0.3) {
+        score -= Math.round(25 * riskRatio);
+        findings.push(`🟡 ML Anomaly Detected: ${triggeredFeatures.length} risk features above baseline (ratio: ${(riskRatio * 100).toFixed(0)}%).`);
+    }
+
+    if (score >= 100) findings.push('✅ ML model: Traffic profile consistent with legitimate browser behavior patterns.');
+    return { score: Math.max(0, score), findings, riskRatio };
 }
 
 /**
  * ENSEMBLE SCORING ENGINE
- * Fuses all 5 modules into a final Trust Score.
+ * Adaptive fusion of all 5 modules using confidence-weighted voting.
+ * - Hard-floor: if any high-weight module hits critical, overall score capped
+ * - Dynamic weights adjust based on data availability
  */
 function runNetworkEnsembleML(conn, allConnections, history) {
     const behavior = analyzeNetworkBehavior(conn, history);
-    const intel = analyzeNetworkIntelligence(conn);
-    const graph = analyzeNetworkGraph(conn, allConnections);
-    const flow = analyzeNetworkFlow(conn);
-    const ml = analyzeNetworkML(conn);
+    const intel    = analyzeNetworkIntelligence(conn);
+    const graph    = analyzeNetworkGraph(conn, allConnections);
+    const flow     = analyzeNetworkFlow(conn);
+    const ml       = analyzeNetworkML(conn);
 
-    // Weights: Behavior (25%), Intel (30%), Graph (15%), Flow (20%), ML (10%)
-    let weightedScore = (
-        (behavior.score * 0.25) +
-        (intel.score * 0.30) +
-        (graph.score * 0.15) +
-        (flow.score * 0.20) +
-        (ml.score * 0.10)
-    );
+    // Dynamic weights: boost intelligence & flow for cross-origin connections
+    const wBeh  = 0.22;
+    const wInte = conn.sameOrigin ? 0.25 : 0.32;
+    const wGrph = 0.12;
+    const wFlow = conn.transferSize > 0 ? 0.22 : 0.10;
+    const wML   = 1 - (wBeh + wInte + wGrph + wFlow); // remaining weight
 
-    // Short-circuit: If any high-weight module reports a critical threat, cap the total score
-    // This prevents "safe" modules from diluting a high-confidence threat detection
-    const minCritical = Math.min(behavior.score, intel.score, flow.score);
-    if (minCritical < 40) {
-        weightedScore = Math.min(weightedScore, minCritical + 10);
+    let weighted =
+        (behavior.score * wBeh) +
+        (intel.score    * wInte) +
+        (graph.score    * wGrph) +
+        (flow.score     * wFlow) +
+        (ml.score       * wML);
+
+    // ── Hard-cap rule ─────────────────────────────────────────────────────────
+    // If ANY of the three primary detection modules (behavior, intel, flow) drops
+    // below 40, the final score cannot exceed (lowestModule + 15).
+    // This prevents a "good" ML reading from washing out a confirmed threat.
+    const primaryMin = Math.min(behavior.score, intel.score, flow.score);
+    if (primaryMin < 40) {
+        weighted = Math.min(weighted, primaryMin + 15);
     }
 
-    const trustScore = Math.max(0, Math.min(100, Math.round(weightedScore)));
-    
+    const trustScore = Math.max(0, Math.min(100, Math.round(weighted)));
+
     let classification = 'Safe';
     let badgeLevel = 'safe';
-    
-    if (trustScore < 40) {
+
+    if (trustScore < 35) {
         classification = 'Malicious';
         badgeLevel = 'critical';
-    } else if (trustScore < 75) {
+    } else if (trustScore < 60) {
         classification = 'Suspicious';
+        badgeLevel = 'high';
+    } else if (trustScore < 80) {
+        classification = 'Moderate Risk';
         badgeLevel = 'medium';
     }
+
+    // Adaptive confidence: higher when modules agree, lower when they diverge
+    const scores = [behavior.score, intel.score, graph.score, flow.score, ml.score];
+    const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+    const variance = scores.reduce((s, v) => s + (v - mean) ** 2, 0) / scores.length;
+    const stdDev = Math.sqrt(variance);
+    // Low stdDev = high agreement = high confidence
+    const confidence = Math.max(55, Math.min(99, Math.round(95 - (stdDev / 4))));
 
     return {
         trustScore,
         classification,
         badgeLevel,
-        confidence: 94 + Math.floor(Math.random() * 5),
+        confidence,
         details: { behavior, intel, graph, flow, ml }
     };
 }
 
-/**
- * Entropy calculator for DGA detection
- */
-function calculateStringEntropy(str) {
-    const len = str.length;
-    if (len === 0) return 0;
-    const freqs = {};
-    for (let i = 0; i < len; i++) {
-        const char = str[i];
-        freqs[char] = (freqs[char] || 0) + 1;
-    }
-    let entropy = 0;
-    for (const char in freqs) {
-        const p = freqs[char] / len;
-        entropy -= p * Math.log2(p);
-    }
-    return entropy;
-}
 
-// Global network history for beaconing detection
+
+// Global network history for beaconing / IAT analysis
 let globalNetworkHistory = [];
 
 // ==========================================
@@ -7828,6 +8948,9 @@ async function loadWifiDeviceSnapshot(forceRefresh) {
             throw new Error('Wi-Fi API returned ' + response.status);
         }
         const data = await response.json();
+        if (data && data.ok === false) {
+            throw new Error(data.error || 'Wi-Fi scan failed');
+        }
         scan.available = !!(data && data.ok);
         scan.network = data && data.network ? data.network : null;
         scan.devices = data && Array.isArray(data.devices) ? data.devices : [];
@@ -7839,7 +8962,9 @@ async function loadWifiDeviceSnapshot(forceRefresh) {
         scan.network = null;
         scan.devices = [];
         scan.meta = null;
-        scan.lastError = 'Local Wi-Fi API unavailable. Start wifi-api-server.js as administrator to list connected devices.';
+        scan.lastError = error && error.message
+            ? error.message
+            : 'Local Wi-Fi API unavailable. Start wifi-api-server.js to list connected devices.';
     } finally {
         scan.loading = false;
         renderNetworkWifiChecks();
@@ -8077,6 +9202,17 @@ function hideEl(id) {
     if (el) el.style.display = 'none';
 }
 
+function setWifiScanError(message) {
+    const el = document.getElementById('wifiScanError');
+    if (!el) return;
+    const detail = message || 'The local Wi-Fi scanner could not complete the scan.';
+    el.innerHTML = `
+        <strong>Scanner issue.</strong> ${escapeHtml(detail)}<br>
+        <span style="display:block;margin-top:.35rem;color:#fca5a5;">Make sure the local scanner is running, then try Re-Scan.</span>
+        <code style="display:block;margin-top:.5rem;background:rgba(0,0,0,.4);padding:.5rem 1rem;border-radius:8px;color:#38bdf8;font-size:.9rem;">node wifi-api-server.js</code>
+    `;
+}
+
 async function startWifiScan(forceRefresh) {
     if (wifiScanInProgress) return;
     wifiScanInProgress = true;
@@ -8111,6 +9247,9 @@ async function startWifiScan(forceRefresh) {
         const resp = await fetch(url, { signal: AbortSignal.timeout(35000) });
         if (!resp.ok) throw new Error('Scan failed');
         const data = await resp.json();
+        if (data && data.ok === false) {
+            throw new Error(data.error || 'Wi-Fi scan failed');
+        }
 
         setWifiProgress(85, 'Looking up MAC vendors…');
         await new Promise(r => setTimeout(r, 300));
@@ -8122,6 +9261,7 @@ async function startWifiScan(forceRefresh) {
 
     } catch (err) {
         hideEl('wifiScanStatus');
+        setWifiScanError(err && err.message ? err.message : 'Wi-Fi scan failed');
         showEl('wifiScanError', 'block');
         showEl('wifiEmptyState', 'block');
     } finally {
@@ -8172,6 +9312,7 @@ function renderWifiResults(data) {
     }
 
     showEl('wifiDevicesGrid', 'block');
+    updateWifiGraphNodes(devices);
 
     // Sync with Dashboard Card
     const dashStatus = document.getElementById('dashWifiStatus');
@@ -8185,7 +9326,7 @@ function renderWifiResults(data) {
 
 function renderWifiDeviceCard(container, device) {
     const info = device.deviceInfo || { type: 'Unknown Device', icon: '❓' };
-    const isRouter = device.role === 'router';
+    const isRouter = device.role === 'router' || device.role === 'gateway';
     const borderColor = isRouter ? 'rgba(251,191,36,.4)' : 'rgba(255,255,255,.08)';
     const bgColor = isRouter
         ? 'linear-gradient(135deg,rgba(251,191,36,.1),rgba(245,158,11,.08))'
@@ -8226,7 +9367,7 @@ function renderWifiDeviceCard(container, device) {
 }
 
 // Wi-Fi Connection Graph Visualization
-function initWifiGraph() {
+function initWifiSignalWaveGraph() {
     const canvas = document.getElementById('wifiGraphCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -8300,40 +9441,11 @@ function renderNetworkWifiChecks() {
     // 2. Profile Device Behavior
     const devices = (scan.devices || []).map(d => profileDeviceBehavior(d));
 
-    // Deep Heuristic Subnet Expansion
-    // If the network is isolated and hides most peers, dynamically extrapolate the hidden subset
-    if (scan.available && devices.length > 0 && devices.length <= 3) {
-        const gatewayIp = infra.gateway !== '192.168.1.1' ? infra.gateway : (devices[0].ip || '192.168.1.1');
-        const subnet = gatewayIp.split('.').slice(0, 3).join('.');
-        const baseMac = 'A4-C3-F0-';
-        
-        const heuristicDevices = [
-            { name: "MacBook-Pro-Admin", mac: "8A-21-3B", offset: 12 },
-            { name: "iPhone-15-Pro", mac: "4C-5D-6E", offset: 104 },
-            { name: "Samsung-QLED-TV", mac: "7F-8A-9B", offset: 201 },
-            { name: "IoT-Thermostat", mac: "1A-2B-3C", offset: 45 },
-            { name: "Sonos-One", mac: "99-88-77", offset: 188 },
-            { name: "Desktop-PC-Gaming", mac: "AA-BB-CC", offset: 67 }
-        ];
-        
-        heuristicDevices.forEach(sim => {
-            const simulatedIp = `${subnet}.${sim.offset}`;
-            if (!devices.some(d => d.ip === simulatedIp)) {
-                devices.push(profileDeviceBehavior({
-                    ip: simulatedIp,
-                    mac: `${baseMac}${sim.mac}`,
-                    hostName: sim.name,
-                    role: 'Device'
-                }));
-            }
-        });
-        
-        devices.sort((a, b) => {
-            const aNum = Number((a.ip || '').split('.').pop()) || 0;
-            const bNum = Number((b.ip || '').split('.').pop()) || 0;
-            return aNum - bNum;
-        });
-    }
+    devices.sort((a, b) => {
+        const aNum = Number((a.ip || '').split('.').pop()) || 0;
+        const bNum = Number((b.ip || '').split('.').pop()) || 0;
+        return aNum - bNum;
+    });
     
     // 3. Combine into Unified Trust Score
     const trust = calculateWifiTrustScore(infra, devices);
@@ -8381,36 +9493,45 @@ function renderNetworkWifiChecks() {
 }
 
 function analyzeWifiInfrastructure(scan) {
-    const isMock = !scan.available;
+    const isUnavailable = !scan.available || !scan.network;
+    const network = scan.network || {};
+    const encryption = isUnavailable
+        ? 'Unavailable'
+        : (network.authentication || network.auth || network.cipher || 'Reported by adapter');
+    const dnsServers = Array.isArray(network.dnsServers) && network.dnsServers.length
+        ? network.dnsServers.join(' | ')
+        : 'Not reported';
+    const gateway = network.defaultGateway || network.gateway || 'Unknown';
+    const isOpen = /open|none|unsecured/i.test(encryption);
+
     return {
-        encryption: isMock ? 'WPA2-PSK (AES)' : (scan.network?.auth || 'WPA2-AES'),
-        encryptionMeta: isMock ? 'Standard consumer-grade protection' : 'Verified hardware encryption level',
-        dns: '1.1.1.1 | 8.8.8.8',
-        dnsMeta: 'Encrypted DNS (DoH) active',
-        gateway: isMock ? '192.168.1.1' : (scan.network?.gateway || '10.0.0.1'),
-        gatewayMeta: 'Authentic Gateway Fingerprint',
-        trustScore: 85
+        encryption,
+        encryptionMeta: isUnavailable ? 'Local scanner unavailable' : 'Reported by Windows WLAN interface',
+        dns: dnsServers,
+        dnsMeta: dnsServers === 'Not reported' ? 'DNS servers unavailable from adapter snapshot' : 'Reported by ipconfig',
+        gateway,
+        gatewayMeta: gateway === 'Unknown' ? 'Gateway unavailable' : 'Default gateway from active adapter',
+        trustScore: isUnavailable ? 70 : (isOpen ? 55 : 95)
     };
 }
 
 function profileDeviceBehavior(device) {
-    // Simulated behavioral profiling
-    const behaviors = [
-        { label: 'Normal', summary: 'Standard background traffic. No scanning patterns detected.', weight: 100 },
-        { label: 'Suspicious', summary: 'Device performing high-frequency DNS lookups. Potential C2 beaconing.', weight: 60 },
-        { label: 'Malicious', summary: 'Active port scanning detected on local segments. Lateral movement risk.', weight: 20 },
-        { label: 'Normal', summary: 'Low-volume IoT communication path identified.', weight: 100 }
-    ];
-    
-    // Deterministic mock based on IP
-    const idx = hashNetworkValue(device.ip || '0') % behaviors.length;
-    const profile = behaviors[idx];
-    
+    const role = String(device.role || '').toLowerCase();
+    const isGateway = role === 'gateway' || role === 'router';
+    const isSelf = role === 'self' || role === 'this device';
+    const hostName = device.hostName || device.name || device.ip || 'Unknown device';
+    const summary = isGateway
+        ? 'Default gateway discovered from the active adapter.'
+        : (isSelf
+            ? 'This computer on the active Wi-Fi adapter.'
+            : 'Peer discovered from the local ARP or neighbor table. No behavioral anomaly was observed by this scan.');
+
     return {
         ...device,
-        behavior: profile.label,
-        summary: profile.summary,
-        weight: profile.weight
+        hostName,
+        behavior: 'Normal',
+        summary,
+        weight: 100
     };
 }
 
@@ -8450,7 +9571,11 @@ function updateWifiIntelligenceFeed(infra, devices) {
     const feed = [];
     const now = formatNetworkTime(Date.now());
     
-    feed.push(`<div class="wifi-feed-item">[${now}] Baseline learning: Network signature verified.</div>`);
+    if (infra.encryption === 'Unavailable') {
+        feed.push(`<div class="wifi-feed-item warning">[${now}] Local scanner unavailable: device discovery is waiting for the Wi-Fi API.</div>`);
+    } else {
+        feed.push(`<div class="wifi-feed-item">[${now}] Adapter snapshot verified from the local Wi-Fi scanner.</div>`);
+    }
     
     if (infra.encryption.toLowerCase().includes('open')) {
         feed.push(`<div class="wifi-feed-item error">[${now}] SECURITY ALERT: Open Wi-Fi detected. Encryption required.</div>`);
@@ -9386,30 +10511,208 @@ function formatCoord(value, positiveDir, negativeDir) {
     return Math.abs(value).toFixed(6) + '° ' + direction;
 }
 
-function getGpsCacheKey(lat, lng, precision = 4) {
+function getGpsCacheKey(lat, lng, precision = 5) {
     return lat.toFixed(precision) + ',' + lng.toFixed(precision);
 }
 
-async function reverseGeocode(lat, lng) {
-    const cacheKey = getGpsCacheKey(lat, lng);
-    if (gpsAddressCache.has(cacheKey)) {
-        return gpsAddressCache.get(cacheKey);
+// ─────────────────────────────────────────────────────────────────────────────
+// PROVIDER 1: Nominatim (OpenStreetMap)
+// zoom=20 = building level, namedetails for POI names
+// ─────────────────────────────────────────────────────────────────────────────
+async function fetchNominatim(lat, lng) {
+    const url = 'https://nominatim.openstreetmap.org/reverse' +
+        '?format=jsonv2&addressdetails=1&namedetails=1&extratags=1' +
+        '&lat=' + lat + '&lon=' + lng + '&zoom=20';
+    const res = await fetch(url, {
+        headers: { 'Accept-Language': 'en', 'User-Agent': 'CyberShieldAI/1.0' },
+        signal: AbortSignal.timeout(6000)
+    });
+    if (!res.ok) throw new Error('Nominatim HTTP ' + res.status);
+    const data = await res.json();
+    if (data.error) throw new Error('Nominatim: ' + data.error);
+    data._provider = 'Nominatim';
+    return data;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROVIDER 2: BigDataCloud (free, excellent India coverage)
+// ─────────────────────────────────────────────────────────────────────────────
+async function fetchBigDataCloud(lat, lng) {
+    const url = 'https://api.bigdatacloud.net/data/reverse-geocode-client' +
+        '?latitude=' + lat + '&longitude=' + lng + '&localityLanguage=en';
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error('BDC HTTP ' + res.status);
+    const data = await res.json();
+    if (!data.countryName) throw new Error('BDC: no country');
+
+    // Extract the finest-grained locality name from localityInfo
+    const info = data.localityInfo || {};
+
+    // "informative" array is ordered coarse→fine; last relevant entry is best
+    let street = null;
+    let neighbourhood = null;
+    if (Array.isArray(info.informative)) {
+        // Reverse to go from fine to coarse, take first matching road-like entry
+        const informativeRev = [...info.informative].reverse();
+        const roadEntry = informativeRev.find(l =>
+            l.description && /road|street|avenue|lane|way|path|nagar|colony|marg|salai|gali|layout|extension|cross|main/i.test(l.description)
+        );
+        if (roadEntry) street = roadEntry.name;
+        // neighbourhood = first "locality" type entry
+        const localEntry = informativeRev.find(l =>
+            l.description && /locality|neighbourhood|ward|block|sector/i.test(l.description)
+        );
+        if (localEntry) neighbourhood = localEntry.name;
     }
 
-    try {
-        const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1' +
-            '&lat=' + encodeURIComponent(lat) +
-            '&lon=' + encodeURIComponent(lng) +
-            '&zoom=18';
-        const response = await fetch(url, { headers: { 'Accept-Language': 'en' } });
-        if (!response.ok) return null;
-        const data = await response.json();
-        gpsAddressCache.set(cacheKey, data);
-        return data;
-    } catch (error) {
-        return null;
-    }
+    // administrative[] is ordered state→district→subdistrict→city→ward
+    const admin = Array.isArray(info.administrative) ? info.administrative : [];
+    const city = admin.find(a => a.adminLevel >= 6 && a.adminLevel <= 7)?.name || data.city || null;
+    const district = admin.find(a => a.adminLevel === 5)?.name || data.principalSubdivisionCode || null;
+    const state = data.principalSubdivision || null;
+
+    return {
+        _provider: 'BigDataCloud',
+        _bdcStreet: street,
+        _bdcNeighbourhood: neighbourhood || data.locality,
+        display_name: [street || data.locality, city, state, data.countryName].filter(Boolean).join(', '),
+        address: {
+            road:          street || null,
+            neighbourhood: neighbourhood || data.locality || null,
+            suburb:        data.locality || null,
+            city:          city,
+            state_district: district,
+            state:         state,
+            postcode:      data.postcode || null,
+            country:       data.countryName,
+            country_code:  data.countryCode ? data.countryCode.toLowerCase() : null
+        }
+    };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROVIDER 3: Photon (Komoot) — great for Indian cities & streets
+// ─────────────────────────────────────────────────────────────────────────────
+async function fetchPhoton(lat, lng) {
+    const url = 'https://photon.komoot.io/reverse?lon=' + lng + '&lat=' + lat + '&limit=1&lang=en';
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error('Photon HTTP ' + res.status);
+    const data = await res.json();
+    const feat = data && data.features && data.features[0];
+    if (!feat) throw new Error('Photon: no result');
+    const p = feat.properties || {};
+
+    // Photon uses: name, street, housenumber, suburb, city, state, country, postcode
+    return {
+        _provider: 'Photon',
+        display_name: [p.name, p.street, p.suburb, p.city, p.state, p.country].filter(Boolean).join(', '),
+        address: {
+            house_number:  p.housenumber || null,
+            amenity:       (p.type === 'amenity' || p.type === 'shop') ? p.name : null,
+            road:          p.street || null,
+            neighbourhood: p.suburb || null,
+            suburb:        p.district || p.suburb || null,
+            city:          p.city || p.county || null,
+            state:         p.state || null,
+            postcode:      p.postcode || null,
+            country:       p.country || null,
+            country_code:  p.countrycode ? p.countrycode.toLowerCase() : null
+        }
+    };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STREET SCORER: ranks how "useful" a street name is
+// ─────────────────────────────────────────────────────────────────────────────
+function streetScore(name) {
+    if (!name) return 0;
+    const n = name.trim();
+    if (n.length < 3) return 1;
+    // Longer specific names score higher; generic locality names score low
+    if (/^(locality|area|ward|block|unnamed|unknown)$/i.test(n)) return 2;
+    if (/road|street|avenue|lane|marg|salai|nagar|layout|cross|main|colony/i.test(n)) return 10;
+    return 5;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MASTER REVERSE GEOCODER — runs all 3 providers in parallel, merges best data
+// ─────────────────────────────────────────────────────────────────────────────
+async function reverseGeocode(lat, lng) {
+    const cacheKey = getGpsCacheKey(lat, lng);
+    if (gpsAddressCache.has(cacheKey)) return gpsAddressCache.get(cacheKey);
+
+    // Fire all 3 in parallel — don't let one slow provider block the others
+    const [nomResult, bdcResult, photonResult] = await Promise.allSettled([
+        fetchNominatim(lat, lng),
+        fetchBigDataCloud(lat, lng),
+        fetchPhoton(lat, lng)
+    ]);
+
+    const nom    = nomResult.status    === 'fulfilled' ? nomResult.value    : null;
+    const bdc    = bdcResult.status    === 'fulfilled' ? bdcResult.value    : null;
+    const photon = photonResult.status === 'fulfilled' ? photonResult.value : null;
+
+    // Use Nominatim as base (most OSM fields)
+    const base = nom || photon || bdc;
+    if (!base) return null;
+
+    // ── Merge: pick best street name across all providers ────────────────────
+    const candidates = [
+        base.address && extractBestStreetNameRaw(base.address),
+        bdc  && bdc.address  && extractBestStreetNameRaw(bdc.address),
+        photon && photon.address && extractBestStreetNameRaw(photon.address),
+        bdc && bdc._bdcStreet
+    ].filter(Boolean);
+
+    candidates.sort((a, b) => streetScore(b) - streetScore(a));
+    const bestStreet = candidates[0] || null;
+
+    // ── Merge: pick best neighbourhood ───────────────────────────────────────
+    const bestNeighbourhood =
+        (nom    && nom.address    && (nom.address.neighbourhood    || nom.address.suburb    || nom.address.quarter)) ||
+        (bdc    && bdc._bdcNeighbourhood) ||
+        (photon && photon.address && (photon.address.neighbourhood || photon.address.suburb)) ||
+        null;
+
+    // ── Merge: build final unified address object ─────────────────────────────
+    const merged = Object.assign({}, base);
+    merged._providers = [nom, bdc, photon].filter(Boolean).map(p => p._provider).join('+');
+    merged._bestStreet = bestStreet;
+    merged._bestNeighbourhood = bestNeighbourhood;
+
+    if (merged.address) {
+        merged.address.road          = bestStreet || merged.address.road;
+        merged.address.neighbourhood = bestNeighbourhood || merged.address.neighbourhood;
+        // Fill missing city from BDC or Photon
+        if (!merged.address.city && !merged.address.town && !merged.address.village) {
+            merged.address.city =
+                (bdc    && bdc.address    && bdc.address.city) ||
+                (photon && photon.address && photon.address.city) ||
+                null;
+        }
+        // Fill missing postcode
+        if (!merged.address.postcode) {
+            merged.address.postcode =
+                (bdc    && bdc.address    && bdc.address.postcode) ||
+                (photon && photon.address && photon.address.postcode) ||
+                null;
+        }
+    }
+
+    gpsAddressCache.set(cacheKey, merged);
+    return merged;
+}
+
+// Helper used inside reverseGeocode (before extractBestStreetName is defined)
+function extractBestStreetNameRaw(address) {
+    if (!address) return null;
+    return address.road || address.pedestrian || address.footway || address.path ||
+           address.cycleway || address.service || address.living_street ||
+           address.residential || address.unclassified || address.track ||
+           address.street || null;
+}
+
+
 
 function resetGPSUI() {
     const dom = getGPSDom();
@@ -9528,15 +10831,40 @@ function formatGpsTimestamp(timestamp) {
     });
 }
 
+/**
+ * extractBestStreetName — picks the most specific available road identifier
+ * from a Nominatim address object using a 14-field priority ladder.
+ */
+function extractBestStreetName(address) {
+    if (!address) return null;
+    // Priority ladder: most specific → least specific
+    return address.road ||
+           address.pedestrian ||
+           address.footway ||
+           address.path ||
+           address.cycleway ||
+           address.service ||
+           address.living_street ||
+           address.residential ||
+           address.unclassified ||
+           address.track ||
+           address.street ||
+           address.hamlet ||
+           address.village ||
+           null;
+}
+
 function formatStreetAddress(address) {
     if (!address) return 'Street: Resolving...';
-    const streetParts = [
-        address.house_number,
-        address.road || address.pedestrian || address.footway || address.street,
-        address.suburb || address.neighbourhood || address.city_district
-    ].filter(Boolean);
-    if (!streetParts.length) return 'Street: Street-level details unavailable';
-    return 'Street: ' + streetParts.join(', ');
+
+    const street = extractBestStreetName(address);
+    const houseNo = address.house_number || '';
+    const neighbourhood = address.neighbourhood || address.suburb ||
+                          address.city_district || address.quarter || '';
+
+    const parts = [houseNo, street, neighbourhood].filter(Boolean);
+    if (!parts.length) return 'Street: ' + (address.display_name ? address.display_name.split(',').slice(0,2).join(',').trim() : 'Street-level details unavailable');
+    return 'Street: ' + parts.join(', ');
 }
 
 function formatRecognizableName(place) {
@@ -9703,27 +11031,55 @@ function updateGPSAddressDetails(geo, timestamp, lat, lng) {
 
     if (dom.addressText) {
         if (address) {
+            const street = extractBestStreetName(address);
+            // Build full address: house → building/POI → road → suburb → city → state → postcode
             const exactParts = [
                 address.house_number,
-                address.building,
-                address.road || address.pedestrian || address.footway || address.street,
-                address.suburb || address.neighbourhood,
-                address.city || address.town || address.village,
+                address.amenity || address.building || address.shop || address.tourism,
+                street,
+                address.neighbourhood || address.suburb || address.quarter,
+                address.city_district || address.county,
+                address.city || address.town || address.village || address.hamlet,
                 address.state_district,
                 address.state,
-                address.postcode
+                address.postcode,
+                address.country
             ].filter(Boolean);
-            dom.addressText.textContent = exactParts.length ? exactParts.join(', ') : (geo && geo.display_name ? geo.display_name : 'Unable to resolve exact address');
+
+            if (exactParts.length >= 2) {
+                dom.addressText.textContent = exactParts.join(', ');
+            } else if (geo && geo.display_name) {
+                // Trim Nominatim's display_name: skip very generic trailing parts
+                const dnParts = geo.display_name.split(',').map(s => s.trim()).filter(Boolean);
+                // Keep first 6 segments which are usually the most specific
+                dom.addressText.textContent = dnParts.slice(0, 6).join(', ');
+            } else {
+                dom.addressText.textContent = 'Unable to resolve exact address';
+            }
+
+            // Show provider used for debug/confidence
+            if (geo && geo._provider) {
+                dom.addressText.title = 'Source: ' + geo._provider +
+                    (geo._bdcRoad ? ' + BigDataCloud road' : '');
+            }
         } else {
-            dom.addressText.textContent = geo && geo.display_name ? geo.display_name : 'Unable to resolve exact address';
+            dom.addressText.textContent = geo && geo.display_name
+                ? geo.display_name.split(',').slice(0, 6).join(', ').trim()
+                : 'Unable to resolve exact address';
         }
     }
     if (dom.streetText) {
-        dom.streetText.textContent = formatStreetAddress(address);
+        const street = extractBestStreetName(address);
+        if (street) {
+            const houseNo = (address && address.house_number) ? address.house_number + ' ' : '';
+            dom.streetText.textContent = 'Street: ' + houseNo + street;
+        } else {
+            dom.streetText.textContent = formatStreetAddress(address);
+        }
     }
     if (dom.areaText) {
         const areaParts = address ? [
-            address.suburb || address.neighbourhood || address.hamlet,
+            address.neighbourhood || address.suburb || address.quarter || address.hamlet,
             address.city_district || address.county,
             address.city || address.town || address.village,
             address.postcode
@@ -9731,7 +11087,7 @@ function updateGPSAddressDetails(geo, timestamp, lat, lng) {
         dom.areaText.textContent = 'Area: ' + (areaParts.length ? areaParts.join(', ') : 'Area details unavailable');
     }
     if (dom.coordsText) {
-        dom.coordsText.textContent = 'Coordinates: ' + lat.toFixed(6) + ', ' + lng.toFixed(6);
+        dom.coordsText.textContent = 'Coordinates: ' + lat.toFixed(6) + '°N, ' + lng.toFixed(6) + '°E';
     }
     if (dom.exactTimeText) {
         dom.exactTimeText.textContent = 'Time: ' + formatGpsTimestamp(timestamp);

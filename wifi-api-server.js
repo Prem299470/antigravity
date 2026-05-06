@@ -79,6 +79,176 @@ function isLocalMAC(mac) {
     return (parseInt(norm.slice(0, 2), 16) & 0x02) !== 0;
 }
 
+function normalizeMac(mac) {
+    const norm = String(mac || '').replace(/[^0-9a-fA-F]/g, '').toUpperCase();
+    if (norm.length !== 12) return null;
+    return norm.match(/.{2}/g).join('-');
+}
+
+function subnetMaskToPrefix(mask) {
+    const parts = String(mask || '').split('.').map(Number);
+    if (parts.length !== 4 || parts.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+    const bits = parts.map(n => n.toString(2).padStart(8, '0')).join('');
+    if (!/^1*0*$/.test(bits)) return null;
+    return bits.indexOf('0') === -1 ? 32 : bits.indexOf('0');
+}
+
+function cleanIpconfigValue(value) {
+    return String(value || '').replace(/\(Preferred\)/gi, '').trim();
+}
+
+function firstValue(values, key) {
+    const list = values[key] || [];
+    return list.find(Boolean) || null;
+}
+
+function firstIpv4(values, key, allowSpecial) {
+    const list = values[key] || [];
+    for (const value of list) {
+        const match = String(value || '').match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/);
+        if (match && ipToInt(match[0]) !== null && (allowSpecial || !isSpecialIp(match[0]))) return match[0];
+    }
+    return null;
+}
+
+function parseIpconfigAdapters(raw) {
+    const adapters = [];
+    let current = null;
+    let lastLabel = null;
+
+    for (const line of String(raw || '').split(/\r?\n/)) {
+        const header = line.match(/^([^:\r\n]+ adapter [^:]+):\s*$/i);
+        if (header) {
+            if (current) adapters.push(current);
+            current = {
+                header: header[1].trim(),
+                name: header[1].replace(/^.*?\badapter\s+/i, '').trim(),
+                values: {}
+            };
+            lastLabel = null;
+            continue;
+        }
+
+        if (!current) continue;
+
+        const pair = line.match(/^\s*([^:]+):\s*(.*)$/);
+        if (pair) {
+            const label = pair[1].replace(/\./g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const value = cleanIpconfigValue(pair[2]);
+            if (!current.values[label]) current.values[label] = [];
+            current.values[label].push(value);
+            lastLabel = label;
+            continue;
+        }
+
+        const continuation = cleanIpconfigValue(line);
+        if (lastLabel && continuation) current.values[lastLabel].push(continuation);
+    }
+
+    if (current) adapters.push(current);
+
+    return adapters.map(adapter => {
+        const values = adapter.values;
+        const desc = firstValue(values, 'description');
+        const mac = normalizeMac(firstValue(values, 'physical address'));
+        const ip = firstIpv4(values, 'ipv4 address');
+        const mask = firstIpv4(values, 'subnet mask', true);
+        const gateway = firstIpv4(values, 'default gateway');
+        const dnsServers = (values['dns servers'] || [])
+            .map(value => {
+                const match = String(value || '').match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/);
+                return match ? match[0] : null;
+            })
+            .filter(Boolean);
+        const haystack = `${adapter.header} ${adapter.name} ${desc || ''}`.toLowerCase();
+
+        return {
+            ...adapter,
+            desc,
+            mac,
+            ip,
+            prefix: subnetMaskToPrefix(mask),
+            gateway,
+            dnsServers: [...new Set(dnsServers)],
+            isWifi: /wi-?fi|wireless|wlan|802\.11/.test(haystack),
+            isVirtual: /virtual|vmware|virtualbox|hyper-v|wsl|bluetooth|loopback|tunnel|tap|vpn/.test(haystack),
+            disconnected: /media disconnected/i.test(firstValue(values, 'media state') || '')
+        };
+    });
+}
+
+function scoreIpconfigAdapter(adapter) {
+    if (!adapter || adapter.disconnected || !adapter.ip) return Number.POSITIVE_INFINITY;
+    let score = 100;
+    if (adapter.isWifi) score -= 60;
+    if (adapter.gateway) score -= 25;
+    if (adapter.mac) score -= 5;
+    if (adapter.isVirtual) score += 80;
+    return score;
+}
+
+function getPrimaryInterfaceFromOs() {
+    const candidates = [];
+    const interfaces = os.networkInterfaces();
+
+    for (const [name, entries] of Object.entries(interfaces)) {
+        for (const entry of entries || []) {
+            if (entry.family !== 'IPv4' || entry.internal || isSpecialIp(entry.address)) continue;
+            const haystack = `${name} ${entry.mac || ''}`.toLowerCase();
+            candidates.push({
+                ifIndex: null,
+                name,
+                desc: name,
+                mac: normalizeMac(entry.mac),
+                ip: entry.address,
+                prefix: subnetMaskToPrefix(entry.netmask) || Number((entry.cidr || '').split('/')[1]) || 24,
+                gateway: null,
+                dnsServers: [],
+                isWifi: /wi-?fi|wireless|wlan|802\.11/.test(haystack),
+                isVirtual: /virtual|vmware|virtualbox|hyper-v|wsl|bluetooth|loopback|tunnel|tap|vpn/.test(haystack),
+                disconnected: false,
+                medium: null,
+                source: 'node-os'
+            });
+        }
+    }
+
+    candidates.sort((a, b) => scoreIpconfigAdapter(a) - scoreIpconfigAdapter(b));
+    return candidates[0] || {};
+}
+
+async function getPrimaryInterfaceFromIpconfig() {
+    let raw = '';
+    try {
+        const { stdout } = await execFileAsync('ipconfig.exe', ['/all'], {
+            windowsHide: true,
+            maxBuffer: 1024 * 1024
+        });
+        raw = stdout;
+    } catch {}
+
+    if (!raw) raw = await ps('ipconfig /all | Out-String');
+
+    const adapters = parseIpconfigAdapters(raw)
+        .filter(adapter => adapter.ip && !isSpecialIp(adapter.ip))
+        .sort((a, b) => scoreIpconfigAdapter(a) - scoreIpconfigAdapter(b));
+    const best = adapters[0];
+    if (!best) return getPrimaryInterfaceFromOs();
+    return {
+        ifIndex: null,
+        name: best.name || best.header,
+        desc: best.desc,
+        mac: best.mac,
+        ip: best.ip,
+        prefix: best.prefix || 24,
+        gateway: best.gateway,
+        dnsServers: best.dnsServers || [],
+        isWifi: best.isWifi,
+        medium: null,
+        source: 'ipconfig'
+    };
+}
+
 // ─── Step 1: Identify the PRIMARY Wi-Fi interface ──────────────────────────
 async function getPrimaryInterface() {
     const raw = await ps(`
@@ -109,6 +279,7 @@ async function getPrimaryInterface() {
                     ip          = $ip4.IPAddress
                     prefix      = $ip4.PrefixLength
                     gateway     = if ($gw) { $gw.NextHop } else { $null }
+                    dnsServers  = @($cfg.DNSServer.ServerAddresses | Where-Object { $_ -match '^\\d+\\.' })
                     isWifi      = ($score -eq 1)
                     medium      = $a.NdisPhysicalMedium
                 }
@@ -117,19 +288,38 @@ async function getPrimaryInterface() {
 
         if ($best) { $best | ConvertTo-Json -Compress } else { '{}' }
     `);
-    try { return JSON.parse(raw) || {}; } catch { return {}; }
+    try {
+        const parsed = JSON.parse(raw) || {};
+        if (parsed && parsed.ip) return { ...parsed, source: 'powershell' };
+    } catch {}
+    return getPrimaryInterfaceFromIpconfig();
 }
 
 // ─── Step 2: WLAN signal info ──────────────────────────────────────────────
 async function getWlanInfo() {
-    const raw = await ps(`netsh wlan show interfaces | Out-String`);
+    let raw = await ps(`netsh wlan show interfaces | Out-String`);
+    if (!raw) {
+        try {
+            const { stdout } = await execFileAsync('netsh.exe', ['wlan', 'show', 'interfaces'], {
+                windowsHide: true,
+                maxBuffer: 1024 * 1024
+            });
+            raw = stdout;
+        } catch {
+            raw = '';
+        }
+    }
     const get = label => {
         const m = raw.match(new RegExp(`^\\s*${label}\\s*:\\s*(.+)$`, 'im'));
         return m ? m[1].trim() : null;
     };
     return {
+        name:         get('Name'),
+        state:        get('State'),
         ssid:         get('SSID') || get('Profile'),
         bssid:        get('AP BSSID'),
+        authentication: get('Authentication'),
+        cipher:       get('Cipher'),
         signal:       get('Signal'),
         band:         get('Band'),
         radioType:    get('Radio type'),
@@ -139,63 +329,220 @@ async function getWlanInfo() {
     };
 }
 
-// ─── Step 3: Ping sweep — ONLY the adapter's /prefix subnet ───────────────
-async function pingSweep(myIp, prefixLen) {
+// ─── Step 3: Fast UDP ARP Sweep (Bypasses Ping blocks) ───────────────────────
+async function udpArpSweep(myIp, prefixLen) {
     const ipInt  = ipToInt(myIp);
-    if (ipInt === null) return;
+    if (ipInt === null) return { attempted: 0, responsive: 0, prefix: prefixLen };
 
-    // Only sweep /16 through /30 — skip huge enterprise /8 nets
     const clampedPrefix = Math.max(16, Math.min(30, prefixLen));
     const hostBits = 32 - clampedPrefix;
-    const count    = Math.min(254, (1 << hostBits) - 2); // max 254 hosts
+    // For large subnets, cap the sweep to 16,384 hosts to prevent memory issues,
+    // though native UDP can handle it easily.
+    const count    = Math.min(16384, (1 << hostBits) - 2); 
     const mask     = (0xFFFFFFFF << hostBits) >>> 0;
     const network  = (ipInt & mask) >>> 0;
 
     const targets = [];
-    for (let i = 1; i <= 254 && targets.length < count; i++) {
+    for (let i = 1; i <= count; i++) {
         const candidate = (network | i) >>> 0;
         if (candidate === ipInt) continue;
         targets.push([candidate >> 24 & 255, candidate >> 16 & 255, candidate >> 8 & 255, candidate & 255].join('.'));
     }
 
-    // Fire in batches of 40 simultaneous pings
-    const BATCH = 40;
-    for (let i = 0; i < targets.length; i += BATCH) {
-        await Promise.all(
-            targets.slice(i, i + BATCH).map(ip =>
-                race(
-                    execFileAsync('ping.exe', ['-n', '1', '-w', '250', ip], { windowsHide: true, maxBuffer: 4096 }),
-                    700
-                ).catch(() => {})
-            )
-        );
+    return new Promise((resolve) => {
+        const dgram = require('node:dgram');
+        const socket = dgram.createSocket('udp4');
+        socket.on('error', () => {});
+        const payload = Buffer.from([0x00]);
+        
+        // Blast UDP packets. The OS will automatically broadcast ARP requests for each IP.
+        for (const ip of targets) {
+            socket.send(payload, 33434, ip, () => {});
+        }
+        
+        // Give the OS network stack 1 second to receive all the ARP hardware replies
+        setTimeout(() => {
+            socket.close();
+            resolve({ attempted: targets.length, responsive: 'ARP-Triggered', prefix: clampedPrefix });
+        }, 1200);
+    });
+}
+
+// ─── Step 3b: Zero-Configuration Multicast Discovery (Accurate Names) ────────
+async function multicastDiscovery() {
+    return new Promise((resolve) => {
+        const discoveredNames = new Map();
+        const dgram = require('node:dgram');
+        let activeSockets = 0;
+        
+        const finish = () => {
+            if (--activeSockets <= 0) resolve(discoveredNames);
+        };
+
+        // --- mDNS (224.0.0.251:5353) ---
+        try {
+            const mdns = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+            activeSockets++;
+            mdns.on('error', () => {});
+            mdns.on('message', (msg, rinfo) => {
+                const packetStr = msg.toString('ascii');
+                const match = packetStr.match(/([a-zA-Z0-9-]+\.local)/i);
+                if (match) {
+                    const name = match[1].replace(/\.local$/i, '');
+                    if (!discoveredNames.has(rinfo.address) && name.length > 2) {
+                        discoveredNames.set(rinfo.address, name);
+                    }
+                }
+            });
+            mdns.bind(0, () => {
+                const query = Buffer.from([
+                    0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 
+                    0x00, 0x00, 0x00, 0x00, 0x09, 0x5f, 0x73, 0x65, 
+                    0x72, 0x76, 0x69, 0x63, 0x65, 0x73, 0x07, 0x5f, 
+                    0x64, 0x6e, 0x73, 0x2d, 0x73, 0x64, 0x04, 0x5f, 
+                    0x75, 0x64, 0x70, 0x05, 0x6c, 0x6f, 0x63, 0x61, 
+                    0x6c, 0x00, 0x00, 0x0c, 0x00, 0x01
+                ]);
+                mdns.send(query, 5353, '224.0.0.251');
+                setTimeout(() => { mdns.close(); finish(); }, 1500);
+            });
+        } catch { activeSockets--; }
+
+        // --- SSDP / UPnP (239.255.255.250:1900) ---
+        try {
+            const ssdp = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+            activeSockets++;
+            ssdp.on('error', () => {});
+            ssdp.on('message', async (msg, rinfo) => {
+                const text = msg.toString('utf8');
+                const locationMatch = text.match(/LOCATION:\s*(http:\/\/[^\s]+)/i);
+                if (locationMatch && !discoveredNames.has(rinfo.address)) {
+                    discoveredNames.set(rinfo.address, 'Discovering...');
+                    try {
+                        const { signal } = new AbortController();
+                        const to = setTimeout(() => signal.abort(), 1000);
+                        const res = await fetch(locationMatch[1], { signal });
+                        clearTimeout(to);
+                        const xml = await res.text();
+                        const nameMatch = xml.match(/<friendlyName>(.*?)<\/friendlyName>/i);
+                        if (nameMatch) {
+                            discoveredNames.set(rinfo.address, nameMatch[1].trim());
+                        } else {
+                            discoveredNames.delete(rinfo.address);
+                        }
+                    } catch {
+                        discoveredNames.delete(rinfo.address);
+                    }
+                }
+            });
+            ssdp.bind(0, () => {
+                const search = Buffer.from(
+                    'M-SEARCH * HTTP/1.1\r\n' +
+                    'Host: 239.255.255.250:1900\r\n' +
+                    'Man: "ssdp:discover"\r\n' +
+                    'ST: ssdp:all\r\n' +
+                    'MX: 1\r\n\r\n'
+                );
+                ssdp.send(search, 1900, '239.255.255.250');
+                setTimeout(() => { ssdp.close(); finish(); }, 1500);
+            });
+        } catch { activeSockets--; }
+
+        if (activeSockets === 0) resolve(discoveredNames);
+    });
+}
+
+function parseArpTable(raw, myIp, prefixLen) {
+    const byIp = new Map();
+    let currentInterfaceIp = null;
+
+    for (const line of String(raw || '').split(/\r?\n/)) {
+        const header = line.match(/^\s*Interface:\s+((?:\d{1,3}\.){3}\d{1,3})\s+---/i);
+        if (header) {
+            currentInterfaceIp = header[1];
+            continue;
+        }
+
+        const row = line.match(/^\s*((?:\d{1,3}\.){3}\d{1,3})\s+([0-9a-f]{2}(?:[-:][0-9a-f]{2}){5})\s+(\w+)/i);
+        if (!row) continue;
+
+        const ip = row[1];
+        const mac = normalizeMac(row[2]);
+        const type = row[3].toLowerCase();
+        const sameInterface = currentInterfaceIp === myIp || inSubnet(currentInterfaceIp, myIp, prefixLen);
+
+        if (!sameInterface || ip === myIp || !mac) continue;
+        if (mac === 'FF-FF-FF-FF-FF-FF' || mac === '00-00-00-00-00-00') continue;
+        if (isSpecialIp(ip) || !inSubnet(ip, myIp, prefixLen)) continue;
+        if (type !== 'dynamic' && type !== 'static') continue;
+
+        const state = type === 'dynamic' ? 'Discovered' : 'Static';
+        const existing = byIp.get(ip);
+        if (!existing || existing.state === 'Static') {
+            byIp.set(ip, { ip, mac, state });
+        }
     }
+
+    return [...byIp.values()];
+}
+
+function normalizeNeighborState(state) {
+    const text = String(state || '').trim();
+    const numericStates = {
+        0: 'Unreachable',
+        1: 'Incomplete',
+        2: 'Probe',
+        3: 'Delay',
+        4: 'Stale',
+        5: 'Reachable',
+        6: 'Permanent'
+    };
+    if (/^\d+$/.test(text)) return numericStates[text] || 'Discovered';
+    return text || 'Discovered';
+}
+
+async function getArpFromArpCommand(myIp, prefixLen) {
+    let raw = '';
+    try {
+        const { stdout } = await execFileAsync('arp.exe', ['-a'], {
+            windowsHide: true,
+            maxBuffer: 1024 * 1024
+        });
+        raw = stdout;
+    } catch {}
+
+    if (!raw) raw = await ps('arp -a | Out-String');
+    return parseArpTable(raw, myIp, prefixLen);
 }
 
 // ─── Step 4: Read ARP table — ONLY for the target interface ───────────────
 async function getArpForInterface(ifIndex, myIp, prefixLen) {
-    const raw = await ps(`
-        Get-NetNeighbor -InterfaceIndex ${ifIndex} -AddressFamily IPv4 |
-        Where-Object {
-            $_.LinkLayerAddress -and
-            $_.LinkLayerAddress -ne 'FF-FF-FF-FF-FF-FF' -and
-            $_.LinkLayerAddress -ne '00-00-00-00-00-00' -and
-            ([string]$_.State) -notin @('Invalid','Unreachable','Permanent')
-        } |
-        Group-Object IPAddress |
-        ForEach-Object { $_.Group | Sort-Object { @('Reachable','Stale','Probe','Delay').IndexOf([string]$_.State) } | Select-Object -First 1 } |
-        Select-Object IPAddress, LinkLayerAddress, State |
-        ConvertTo-Json -Compress
-    `);
-
     let list = [];
-    try {
-        const parsed = JSON.parse(raw);
-        list = Array.isArray(parsed) ? parsed : (parsed && parsed.IPAddress ? [parsed] : []);
-    } catch { return []; }
 
-    // Strict subnet filter — only IPs that truly belong to this interface's subnet
-    return list
+    if (ifIndex) {
+        const raw = await ps(`
+            Get-NetNeighbor -InterfaceIndex ${ifIndex} -AddressFamily IPv4 |
+            Where-Object {
+                $_.LinkLayerAddress -and
+                $_.LinkLayerAddress -ne 'FF-FF-FF-FF-FF-FF' -and
+                $_.LinkLayerAddress -ne '00-00-00-00-00-00' -and
+                ([string]$_.State) -notin @('Invalid','Unreachable','Permanent')
+            } |
+            Group-Object IPAddress |
+            ForEach-Object { $_.Group | Sort-Object { @('Reachable','Stale','Probe','Delay').IndexOf([string]$_.State) } | Select-Object -First 1 } |
+            Select-Object IPAddress, LinkLayerAddress, State |
+            ConvertTo-Json -Compress
+        `);
+
+        try {
+            const parsed = JSON.parse(raw);
+            list = Array.isArray(parsed) ? parsed : (parsed && parsed.IPAddress ? [parsed] : []);
+        } catch {
+            list = [];
+        }
+    }
+
+    const powershellDevices = list
         .filter(d =>
             d.IPAddress &&
             !isSpecialIp(d.IPAddress) &&
@@ -203,9 +550,12 @@ async function getArpForInterface(ifIndex, myIp, prefixLen) {
         )
         .map(d => ({
             ip:    d.IPAddress,
-            mac:   d.LinkLayerAddress || 'Unknown',
-            state: d.State || 'Discovered'
+            mac:   normalizeMac(d.LinkLayerAddress) || 'Unknown',
+            state: normalizeNeighborState(d.State)
         }));
+
+    if (powershellDevices.length) return powershellDevices;
+    return getArpFromArpCommand(myIp, prefixLen);
 }
 
 // ─── Step 5: Name resolution (parallel, per device) ───────────────────────
@@ -270,7 +620,12 @@ async function getVendor(mac) {
 }
 
 // ─── Step 7: Guess device type ─────────────────────────────────────────────
-function guessType(name, vendor, role) {
+function parseMbps(value) {
+    const match = String(value || '').match(/\d+(?:\.\d+)?/);
+    return match ? Number(match[0]) : null;
+}
+
+function guessType(name, vendor, role, mac) {
     const s = `${name || ''} ${vendor || ''}`.toLowerCase();
     if (role === 'gateway')     return { type: 'Router / Gateway',    icon: '🌐' };
     if (role === 'self')        return { type: 'This PC',             icon: '💻' };
@@ -294,7 +649,7 @@ function guessType(name, vendor, role) {
     if (/tp-link|netgear|asus.*rt|linksys|dlink|zyxel|ubiquiti/.test(s))
                                 return { type: 'Access Point',        icon: '📡' };
     if (/microsoft|windows/.test(s)) return { type: 'Windows PC',    icon: '🖥️' };
-    if (isLocalMAC(mac => mac)) return { type: 'Randomized MAC Device', icon: '📱' };
+    if (isLocalMAC(mac)) return { type: 'Randomized MAC Device', icon: '📱' };
     return { type: 'Unknown Device', icon: '❓' };
 }
 
@@ -308,7 +663,7 @@ async function fullScan(forceRefresh) {
 
     // 1. Get primary interface
     const iface = await getPrimaryInterface();
-    if (!iface.ifIndex || !iface.ip) {
+    if (!iface.ip) {
         return {
             ok: false,
             error: 'No active network adapter found.',
@@ -323,10 +678,11 @@ async function fullScan(forceRefresh) {
     const ifIndex  = iface.ifIndex;
     const gateway  = iface.gateway;
 
-    // 2. Get WLAN info in parallel with ping sweep
-    const [wlanInfo] = await Promise.all([
+    // 2. Run ARP UDP Sweep and Multicast Discovery in parallel with WLAN info
+    const [wlanInfo, sweepMeta, multicastNames] = await Promise.all([
         getWlanInfo(),
-        pingSweep(myIp, prefix)   // populates ARP table while we get WLAN info
+        udpArpSweep(myIp, prefix),
+        multicastDiscovery()
     ]);
 
     // 3. Read ARP table — ONLY for this interface, filtered to subnet
@@ -344,22 +700,28 @@ async function fullScan(forceRefresh) {
                 getVendor(device.mac)
             ]);
 
-            let name = hostname;
+            let name = multicastNames.get(device.ip);
             if (!name) {
-                if (isGateway)     name = vendor ? `${vendor} Router` : 'Network Router';
-                else if (vendor)   name = `${vendor} Device`;
-                else               name = `Device (${device.ip})`;
+                name = hostname;
+                if (!name) {
+                    if (isGateway)     name = vendor ? `${vendor} Router` : 'Network Router';
+                    else if (vendor)   name = `${vendor} Device`;
+                    else               name = `Device (${device.ip})`;
+                }
             }
 
-            const deviceInfo = guessType(name, vendor, role);
+            const deviceInfo = guessType(name, vendor, role, device.mac);
 
             return {
                 ip:    device.ip,
                 mac:   device.mac,
                 name,
+                hostName: name,
                 vendor: vendor || null,
                 role,
                 state: device.state,
+                type: deviceInfo.type,
+                icon: deviceInfo.icon,
                 deviceInfo
             };
         })
@@ -378,18 +740,31 @@ async function fullScan(forceRefresh) {
         ok: true,
         scannedAt: new Date().toISOString(),
         network: {
+            state:        wlanInfo.state,
             ssid:         wlanInfo.ssid    || iface.name,
             bssid:        wlanInfo.bssid,
+            auth:         wlanInfo.authentication,
+            authentication: wlanInfo.authentication,
+            cipher:       wlanInfo.cipher,
             signal:       wlanInfo.signal,
             band:         wlanInfo.band,
             radioType:    wlanInfo.radioType,
             channel:      wlanInfo.channel,
             receiveRate:  wlanInfo.receiveRate,
             transmitRate: wlanInfo.transmitRate,
+            receiveRateMbps: parseMbps(wlanInfo.receiveRate),
+            transmitRateMbps: parseMbps(wlanInfo.transmitRate),
             myIp,
             myMac:        iface.mac,
             gateway,
+            defaultGateway: gateway,
+            ipv4Address:  myIp,
+            localMac:     iface.mac,
             adapterName:  iface.name,
+            adapterDescription: iface.desc,
+            prefixLength: prefix,
+            dnsServers:   iface.dnsServers || [],
+            discoverySource: iface.source || 'powershell',
             subnet:       `${myIp}/${prefix}`
         },
         thisDevice: {
@@ -401,13 +776,18 @@ async function fullScan(forceRefresh) {
         devices:    enriched,
         totalFound: enriched.length,
         scanTechniques: [
-            `ARP (ifIndex=${ifIndex})`,
+            ifIndex ? `PowerShell Get-NetNeighbor (ifIndex=${ifIndex})` : 'arp.exe fallback',
             'Ping sweep (subnet only)',
             'NetBIOS',
             'Reverse DNS',
             'Ping -a',
             'MAC vendor API'
-        ]
+        ],
+        meta: {
+            discovery: ifIndex ? 'PowerShell adapter + neighbor table' : 'ipconfig.exe + arp.exe fallback',
+            naming: 'NetBIOS, reverse DNS, ping -a, MAC vendor lookup',
+            sweep: sweepMeta
+        }
     };
 
     cachedSnapshot = result;

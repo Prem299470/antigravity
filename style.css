@@ -3,39 +3,39 @@
    ========================================== */
 
 :root {
-    /* Colors */
-    --bg-primary: #0a0e1a;
-    --bg-secondary: #111827;
-    --bg-card: rgba(17, 24, 39, 0.7);
-    --bg-card-hover: rgba(23, 33, 54, 0.85);
-    --bg-input: rgba(15, 20, 35, 0.8);
+    /* Colors - Deep Cyber Theme */
+    --bg-primary: #030308;
+    --bg-secondary: #0a0a14;
+    --bg-card: rgba(10, 12, 24, 0.45);
+    --bg-card-hover: rgba(18, 24, 45, 0.65);
+    --bg-input: rgba(4, 8, 16, 0.7);
     
-    --accent-cyan: #00f0ff;
-    --accent-purple: #a855f7;
-    --accent-blue: #3b82f6;
-    --accent-gradient: linear-gradient(135deg, #00f0ff, #a855f7);
-    --accent-gradient-hover: linear-gradient(135deg, #33f5ff, #b96df8);
+    --accent-cyan: #00F3FF;
+    --accent-purple: #B026FF;
+    --accent-blue: #0077FF;
+    --accent-gradient: linear-gradient(135deg, #00F3FF, #B026FF);
+    --accent-gradient-hover: linear-gradient(135deg, #33F8FF, #C75BFF);
     
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
+    --text-primary: #E0F7FF;
+    --text-secondary: #8AB4F8;
+    --text-muted: #4A6B9C;
     
-    --risk-safe: #22c55e;
-    --risk-low: #84cc16;
-    --risk-medium: #f59e0b;
-    --risk-high: #f97316;
-    --risk-critical: #ef4444;
+    --risk-safe: #00FF66;
+    --risk-low: #A2FF00;
+    --risk-medium: #FFB300;
+    --risk-high: #FF3366;
+    --risk-critical: #FF003C;
     
-    --border-color: rgba(148, 163, 184, 0.1);
-    --border-glow: rgba(0, 240, 255, 0.3);
+    --border-color: rgba(0, 243, 255, 0.15);
+    --border-glow: rgba(0, 243, 255, 0.4);
     
     --sidebar-width: 260px;
     --radius: 12px;
     --radius-lg: 16px;
-    --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     
-    --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--border-color);
-    --shadow-glow: 0 0 20px rgba(0, 240, 255, 0.1);
+    --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.8), inset 0 0 15px rgba(0, 243, 255, 0.05);
+    --shadow-glow: 0 0 20px rgba(0, 243, 255, 0.3), 0 0 40px rgba(176, 38, 255, 0.1);
 }
 
 /* ==========================================
@@ -67,13 +67,65 @@ body {
 
 .bg-grid {
     position: fixed;
-    inset: 0;
+    width: 200vw;
+    height: 200vh;
+    left: -50vw;
+    top: 0;
     background-image: 
-        linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
-    background-size: 50px 50px;
+        linear-gradient(rgba(0, 243, 255, 0.15) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 243, 255, 0.15) 1px, transparent 1px);
+    background-size: 60px 60px;
+    transform: perspective(600px) rotateX(60deg) translateY(-100px) translateZ(-200px);
+    transform-origin: center top;
+    animation: gridMove 3s linear infinite;
+    mask-image: linear-gradient(to bottom, transparent 0%, black 70%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 70%);
     z-index: 0;
     pointer-events: none;
+}
+
+@keyframes gridMove {
+    0% { background-position: 0 0; }
+    100% { background-position: 0 60px; }
+}
+
+/* ==========================================
+   Cyber Earth Globe (Canvas)
+   ========================================== */
+
+.cyber-earth {
+    position: fixed;
+    right: -160px;
+    bottom: -160px;
+    width: 780px;
+    height: 780px;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 1;
+}
+
+/* Ambient glow behind globe */
+.cyber-earth::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60%;
+    height: 60%;
+    background: radial-gradient(circle, rgba(0, 255, 100, 0.08) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(40px);
+}
+
+.cyber-earth canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    filter:
+        drop-shadow(0 0 25px rgba(0, 255, 100, 0.8))
+        drop-shadow(0 0 70px rgba(0, 255, 100, 0.35));
 }
 
 .bg-glow {
@@ -408,6 +460,7 @@ body {
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 30px rgba(0, 243, 255, 0.4);
 }
 
 .emergency-header h1 {
@@ -436,7 +489,7 @@ body {
 
 .stat-card {
     background: var(--bg-card);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(20px);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     padding: 20px;
@@ -447,6 +500,8 @@ body {
     transition: all var(--transition);
     position: relative;
     overflow: hidden;
+    transform-style: preserve-3d;
+    box-shadow: var(--shadow-card);
 }
 
 .stat-card::before {
@@ -464,8 +519,10 @@ body {
 }
 
 .stat-card:hover {
-    transform: translateY(-2px);
+    transform: translateY(-8px) translateZ(20px) scale(1.02);
     background: var(--bg-card-hover);
+    box-shadow: 0 15px 50px rgba(0, 0, 0, 0.9), inset 0 0 30px rgba(0, 243, 255, 0.15), 0 0 20px rgba(0, 243, 255, 0.2);
+    border-color: rgba(0, 243, 255, 0.4);
 }
 
 .stat-card:hover::before {
@@ -537,12 +594,21 @@ body {
 
 .dashboard-banner {
     background: var(--bg-card);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(20px);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     padding: 32px;
     position: relative;
     overflow: hidden;
+    box-shadow: var(--shadow-card);
+    transform-style: preserve-3d;
+    transition: transform var(--transition);
+}
+
+.dashboard-banner:hover {
+    transform: translateY(-4px) translateZ(10px);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9), inset 0 0 40px rgba(176, 38, 255, 0.1);
+    border-color: rgba(176, 38, 255, 0.3);
 }
 
 .banner-content {
@@ -602,11 +668,18 @@ body {
 
 .input-card, .results-card {
     background: var(--bg-card);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(20px);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     padding: 28px;
     box-shadow: var(--shadow-card);
+    transform-style: preserve-3d;
+    transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.input-card:hover, .results-card:hover {
+    transform: translateY(-4px) translateZ(15px);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9), inset 0 0 30px rgba(0, 243, 255, 0.1);
 }
 
 .input-card h2, .results-card h2 {
@@ -1007,28 +1080,37 @@ select.input-field option {
 
 .btn-primary {
     background: var(--accent-gradient);
-    color: #0a0e1a;
+    color: #030308;
+    box-shadow: 0 4px 15px rgba(0, 243, 255, 0.2);
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    transform-style: preserve-3d;
 }
 
 .btn-primary:hover {
     background: var(--accent-gradient-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 20px rgba(0, 240, 255, 0.3);
+    transform: translateY(-4px) translateZ(20px);
+    box-shadow: 0 8px 30px rgba(0, 243, 255, 0.6), 0 0 20px rgba(176, 38, 255, 0.4);
 }
 
 .btn-primary:active {
-    transform: translateY(0);
+    transform: translateY(2px) translateZ(5px);
+    box-shadow: 0 2px 10px rgba(0, 243, 255, 0.3);
 }
 
 .btn-secondary {
-    background: transparent;
+    background: rgba(0, 243, 255, 0.05);
     color: var(--accent-cyan);
-    border: 1px solid rgba(0, 240, 255, 0.3);
+    border: 1px solid rgba(0, 243, 255, 0.3);
+    backdrop-filter: blur(5px);
+    transform-style: preserve-3d;
 }
 
 .btn-secondary:hover {
-    background: rgba(0, 240, 255, 0.05);
+    background: rgba(0, 243, 255, 0.15);
     border-color: var(--accent-cyan);
+    transform: translateY(-4px) translateZ(10px);
+    box-shadow: 0 8px 25px rgba(0, 243, 255, 0.2), inset 0 0 10px rgba(0, 243, 255, 0.1);
+    text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
 }
 
 .btn-icon {
@@ -2459,6 +2541,29 @@ select.input-field option {
     background: rgba(15, 23, 42, 0.86);
     border: 1px solid rgba(148, 163, 184, 0.12);
     color: var(--text-primary);
+}
+
+.ai-chatbot-feedback {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    margin-left: 4px;
+}
+
+.ai-chatbot-feedback button {
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.72);
+    color: var(--text-muted);
+    font-size: 11px;
+    padding: 4px 8px;
+    cursor: pointer;
+}
+
+.ai-chatbot-feedback button.selected {
+    color: #dffcf8;
+    border-color: rgba(20, 184, 166, 0.35);
+    background: rgba(20, 184, 166, 0.14);
 }
 
 .ai-chatbot-message.user .ai-chatbot-bubble {
