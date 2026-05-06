@@ -7,13 +7,16 @@
     <title>Cyber Shield AI | Advanced Digital Intelligence</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@500;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <!-- Animated Background -->
     <div class="bg-grid"></div>
+    <div class="bg-scanlines"></div>
+    <div class="bg-constellation" aria-hidden="true"></div>
+    <div class="bg-frame" aria-hidden="true"></div>
 
     <!-- Cyber Earth Globe -->
     <div class="cyber-earth">
@@ -190,6 +193,20 @@
                 <span class="status-dot"></span>
                 <span class="status-text">AI Engine Active</span>
             </div>
+            <div class="sidebar-telemetry">
+                <div class="telemetry-row">
+                    <span class="telemetry-label">Ops Mode</span>
+                    <strong class="telemetry-value">Command Center</strong>
+                </div>
+                <div class="telemetry-row">
+                    <span class="telemetry-label">Threat Bus</span>
+                    <strong class="telemetry-value">Live Feed Ready</strong>
+                </div>
+                <div class="telemetry-row">
+                    <span class="telemetry-label">Integrity</span>
+                    <strong class="telemetry-value">Shielded Runtime</strong>
+                </div>
+            </div>
         </div>
     </nav>
 
@@ -199,10 +216,32 @@
             <span></span><span></span><span></span>
         </button>
         <span class="mobile-logo">Cyber Shield <span class="logo-ai">AI</span></span>
+        <span class="mobile-status">SECURE</span>
     </header>
 
     <!-- Main Content -->
     <main class="main-content" id="mainContent">
+        <div class="ops-topbar" aria-hidden="true">
+            <div class="ops-chip-group">
+                <span class="ops-chip">Cyber Defense Grid</span>
+                <span class="ops-chip">Live Telemetry</span>
+                <span class="ops-chip">Analyst Workspace</span>
+            </div>
+            <div class="ops-signal-panel">
+                <div class="ops-signal">
+                    <span class="ops-signal-label">Runtime</span>
+                    <strong class="ops-signal-value">Active</strong>
+                </div>
+                <div class="ops-signal">
+                    <span class="ops-signal-label">Response</span>
+                    <strong class="ops-signal-value">Immediate</strong>
+                </div>
+                <div class="ops-signal">
+                    <span class="ops-signal-label">Visibility</span>
+                    <strong class="ops-signal-value">Full Spectrum</strong>
+                </div>
+            </div>
+        </div>
 
         <!-- ========== DASHBOARD ========== -->
         <section class="content-section active" id="section-dashboard">
@@ -354,9 +393,29 @@
                             </defs>
                         </svg>
                     </div>
-                    <div>
+                    <div class="banner-copy">
+                        <div class="banner-kicker">Threat Surface Control</div>
                         <h2>All Systems Protected</h2>
-                        <p>Cyber Shield AI is actively monitoring your digital security. Select a tool above to begin analysis.</p>
+                        <p>Cyber Shield AI is actively monitoring your digital security. Launch a module below to inspect scams, credentials, devices, traffic, and real-world exposure with a unified cyber console.</p>
+                        <div class="banner-tags">
+                            <span class="banner-tag">Live Intelligence</span>
+                            <span class="banner-tag">Router Visibility</span>
+                            <span class="banner-tag">Rapid Response</span>
+                        </div>
+                    </div>
+                    <div class="banner-metrics" aria-hidden="true">
+                        <div class="banner-metric">
+                            <span class="banner-metric-label">Status</span>
+                            <strong class="banner-metric-value">Armed</strong>
+                        </div>
+                        <div class="banner-metric">
+                            <span class="banner-metric-label">Mode</span>
+                            <strong class="banner-metric-value">Cyber Shield</strong>
+                        </div>
+                        <div class="banner-metric">
+                            <span class="banner-metric-label">Signal</span>
+                            <strong class="banner-metric-value">Secure Link</strong>
+                        </div>
                     </div>
                 </div>
                 <div class="shield-pulse"></div>
