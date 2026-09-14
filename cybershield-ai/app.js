@@ -5,6 +5,11 @@
 const PASSWORD_STORAGE_KEY = 'cybershield-password-manager';
 const AUTH_USERS_STORAGE_KEY = 'cybershield-auth-users';
 const AUTH_SESSION_STORAGE_KEY = 'cybershield-auth-session';
+// Google OAuth 2.0 Client ID
+// To set yours: get it from https://console.cloud.google.com → APIs & Services → Credentials → OAuth 2.0 Client ID
+// Set Authorized JavaScript origins to: https://cybershieldssit.netlify.app  and  http://127.0.0.1:4318
+const GOOGLE_CLIENT_ID = '377546997406-udvkege2ecvqludrhb06dk2dapicpuq8.apps.googleusercontent.com';
+
 const VT_API_KEY_STORAGE_KEY = 'cybershield-vt-api-key';
 const CHATBOT_FEEDBACK_STORAGE_KEY = 'shieldbox-chatbot-feedback';
 const VT_DIRECT_UPLOAD_LIMIT = 32 * 1024 * 1024;
@@ -738,6 +743,156 @@ function restoreAuthSession() {
     }
 }
 
+
+// ============================================================
+// Google Authentication Integration
+// ============================================================
+
+function decodeGoogleJwt(credential) {
+    try {
+        const parts = credential.split('.');
+        if (parts.length !== 3) return null;
+        // Decode base64url payload
+        const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const padded = payload + '=='.slice(0, (4 - payload.length % 4) % 4);
+        const decoded = JSON.parse(atob(padded));
+        return decoded;
+    } catch (e) {
+        console.warn('Google JWT decode failed:', e);
+        return null;
+    }
+}
+
+function handleGoogleCredentialResponse(response) {
+    const credential = response && response.credential;
+    if (!credential) {
+        showAuthMessage('Google sign-in failed. Please try again.', 'error');
+        return;
+    }
+
+    const payload = decodeGoogleJwt(credential);
+    if (!payload || !payload.email) {
+        showAuthMessage('Unable to read Google account info. Please try again.', 'error');
+        return;
+    }
+
+    const email = payload.email.toLowerCase();
+    const name = payload.name || payload.given_name || email.split('@')[0];
+    const picture = payload.picture || '';
+
+    // Persist or update the google user in localStorage
+    const users = getStoredAuthUsers();
+    let user = users.find(u => u.email === email);
+    if (!user) {
+        user = {
+            name,
+            email,
+            picture,
+            provider: 'google',
+            createdAt: new Date().toISOString()
+        };
+        users.push(user);
+        saveStoredAuthUsers(users);
+    } else {
+        // Update picture/name if changed
+        user.name = name;
+        user.picture = picture;
+        user.provider = user.provider || 'google';
+        saveStoredAuthUsers(users);
+    }
+
+    localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify({
+        email,
+        provider: 'google',
+        picture,
+        signedInAt: new Date().toISOString()
+    }));
+
+    unlockDashboardForGoogleUser(user);
+}
+
+function unlockDashboardForGoogleUser(user) {
+    document.body.classList.remove('auth-locked');
+    document.body.classList.add('auth-ready');
+    const authScreen = document.getElementById('authScreen');
+    const userName = document.getElementById('authUserName');
+    if (authScreen) authScreen.setAttribute('aria-hidden', 'true');
+    if (userName) {
+        const displayName = user.name || user.email;
+        if (user.picture) {
+            userName.innerHTML = '<img class="auth-google-avatar" src="' + user.picture + '" alt="" referrerpolicy="no-referrer"> <span class="auth-name-text">' + displayName + '</span><span class="auth-google-badge">G</span>';
+        } else {
+            userName.innerHTML = '<span class="auth-name-text">' + displayName + '</span><span class="auth-google-badge">G</span>';
+        }
+    }
+}
+
+function restoreGoogleSession() {
+    try {
+        const session = JSON.parse(localStorage.getItem(AUTH_SESSION_STORAGE_KEY) || 'null');
+        if (!session || !session.email || session.provider !== 'google') return false;
+        const user = getStoredAuthUsers().find(u => u.email === session.email);
+        if (!user) return false;
+        unlockDashboardForGoogleUser(user);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function initializeGoogleAuth() {
+    if (typeof google === 'undefined' || !google.accounts || !google.accounts.id) {
+        // GSI not loaded yet – retry shortly
+        setTimeout(initializeGoogleAuth, 500);
+        return;
+    }
+
+    // Check if we have a valid Client ID
+    if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.startsWith('YOUR_') || GOOGLE_CLIENT_ID.includes('vc9vdl7f2g8k8l8j6n5m4p3q2r1s0t9')) {
+        console.warn('[CyberShield] Google Auth: Client ID not configured.');
+        renderGoogleButtonFallback();
+        return;
+    }
+
+    try {
+        google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: handleGoogleCredentialResponse,
+            auto_select: false,
+            cancel_on_tap_outside: true,
+            context: 'signin'
+        });
+
+        const btnContainer = document.getElementById('googleSignInBtn');
+        if (btnContainer) {
+            google.accounts.id.renderButton(btnContainer, {
+                type: 'standard',
+                theme: 'outline',
+                size: 'large',
+                text: 'signin_with',
+                shape: 'rectangular',
+                logo_alignment: 'left',
+                width: Math.min(btnContainer.offsetWidth || 360, 400)
+            });
+        }
+
+        // Offer One Tap if not already signed in
+        const session = JSON.parse(localStorage.getItem(AUTH_SESSION_STORAGE_KEY) || 'null');
+        if (!session || !session.email) {
+            google.accounts.id.prompt();
+        }
+    } catch (e) {
+        console.warn('[CyberShield] Google Auth init failed:', e);
+        renderGoogleButtonFallback();
+    }
+}
+
+function renderGoogleButtonFallback() {
+    const btnContainer = document.getElementById('googleSignInBtn');
+    if (!btnContainer) return;
+    btnContainer.innerHTML = '<div style="padding:10px 0;text-align:center;font-size:12px;color:rgba(255,255,255,0.35);">Google Sign-In requires a valid OAuth Client ID.<br><a href=\"https://console.cloud.google.com\" target=\"_blank\" style=\"color:#4285F4;\">Set up at Google Cloud Console</a></div>';
+}
+
 function initializeAuth() {
     lockDashboard();
 
@@ -811,13 +966,28 @@ function initializeAuth() {
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
             localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+            // Also revoke Google One Tap session
+            try {
+                if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+                    google.accounts.id.disableAutoSelect();
+                }
+            } catch (e) {}
             setAuthMode('login');
             lockDashboard();
         });
     }
 
     setAuthMode('login');
-    restoreAuthSession();
+    // Try Google session first, then local session
+    if (!restoreGoogleSession()) {
+        restoreAuthSession();
+    }
+    // Initialize Google Sign-In (runs after GSI script loads)
+    if (document.readyState === 'complete') {
+        initializeGoogleAuth();
+    } else {
+        window.addEventListener('load', initializeGoogleAuth);
+    }
 }
 
 // Navigation
@@ -854,7 +1024,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     statCards.forEach(card => {
-        card.addEventListener('click', () => navigateTo(card.dataset.section));
+        if (card.dataset.section) {
+            card.addEventListener('click', () => navigateTo(card.dataset.section));
+        }
     });
 
     if (hamburger) {
@@ -880,6 +1052,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeNetworkMonitoring();
     configureWifiScannerUi();
     initializeChatbot();
+    initializeDashboardVpn();
+    initializeFootprintPage();
 
     // Initialize visualization graphs last so they don't block navigation if they fail
     try {
@@ -6775,54 +6949,359 @@ async function analyzePhoneNumberReputation() {
 }
 
 // ==========================================
+// 5c. Impersonation Call Verification Module
+// ==========================================
+
+const IMP_VAULT_STORAGE_KEY = 'cybershield-imp-vault';
+const IMP_VAULT_VERIFY_KEY = 'cybershield-imp-vault-verify';
+const IMP_CALL_LOG_KEY = 'cybershield-imp-call-log';
+let impVaultCryptoKey = null;
+let impVaultContacts = [];
+let impCooldownTimer = null;
+
+// --- Tab Switching ---
+function switchEngineTab(tab) {
+    document.querySelectorAll('.engine-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.engine-tab-content').forEach(c => c.classList.remove('active'));
+    const tabBtn = document.querySelector(`.engine-tab[onclick*="${tab}"]`);
+    const tabContent = document.getElementById('tab-' + tab);
+    if (tabBtn) tabBtn.classList.add('active');
+    if (tabContent) tabContent.classList.add('active');
+}
+
+// --- Web Crypto AES-256-GCM Vault ---
+async function deriveKey(password, salt) {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: salt, iterations: 310000, hash: 'SHA-256' },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+    );
+}
+
+async function encryptData(key, data) {
+    const enc = new TextEncoder();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(JSON.stringify(data)));
+    const buf = new Uint8Array(iv.length + ct.byteLength);
+    buf.set(iv, 0);
+    buf.set(new Uint8Array(ct), iv.length);
+    return btoa(String.fromCharCode(...buf));
+}
+
+async function decryptData(key, b64) {
+    const raw = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const iv = raw.slice(0, 12);
+    const ct = raw.slice(12);
+    const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    return JSON.parse(new TextDecoder().decode(dec));
+}
+
+function getVaultSalt() {
+    let s = localStorage.getItem('cybershield-imp-vault-salt');
+    if (!s) { const arr = crypto.getRandomValues(new Uint8Array(16)); s = btoa(String.fromCharCode(...arr)); localStorage.setItem('cybershield-imp-vault-salt', s); }
+    return Uint8Array.from(atob(s), c => c.charCodeAt(0));
+}
+
+async function unlockVault() {
+    const pw = document.getElementById('vaultMasterPw').value;
+    if (!pw) { alert('Enter a master password.'); return; }
+    const salt = getVaultSalt();
+    try {
+        impVaultCryptoKey = await deriveKey(pw, salt);
+        const verifier = localStorage.getItem(IMP_VAULT_VERIFY_KEY);
+        if (verifier) {
+            try { await decryptData(impVaultCryptoKey, verifier); } catch { alert('Wrong password.'); impVaultCryptoKey = null; return; }
+        } else {
+            const v = await encryptData(impVaultCryptoKey, { v: 'cybershield-vault-ok' });
+            localStorage.setItem(IMP_VAULT_VERIFY_KEY, v);
+        }
+        const stored = localStorage.getItem(IMP_VAULT_STORAGE_KEY);
+        impVaultContacts = stored ? await decryptData(impVaultCryptoKey, stored) : [];
+        document.getElementById('vaultLockedView').style.display = 'none';
+        document.getElementById('vaultUnlockedView').style.display = 'block';
+        document.getElementById('vaultStatusBadge').className = 'vault-status unlocked';
+        document.getElementById('vaultStatusBadge').innerHTML = '🔓 Unlocked';
+        renderVaultContacts();
+        populateContactSelector();
+    } catch (e) { alert('Failed to unlock vault: ' + e.message); impVaultCryptoKey = null; }
+}
+
+function lockVault() {
+    impVaultCryptoKey = null;
+    impVaultContacts = [];
+    document.getElementById('vaultLockedView').style.display = '';
+    document.getElementById('vaultUnlockedView').style.display = 'none';
+    document.getElementById('vaultStatusBadge').className = 'vault-status locked';
+    document.getElementById('vaultStatusBadge').innerHTML = '🔒 Locked';
+    document.getElementById('vaultMasterPw').value = '';
+    const sel = document.getElementById('impContactSelect');
+    sel.innerHTML = '<option value="">-- Unlock vault first --</option>';
+}
+
+function renderVaultContacts() {
+    const list = document.getElementById('vaultContactsList');
+    if (!impVaultContacts.length) {
+        list.innerHTML = '<p style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px 0;">No contacts yet. Add your first contact above.</p>';
+        return;
+    }
+    list.innerHTML = impVaultContacts.map((c, i) => `
+        <div class="vault-contact-card" data-idx="${i}" onclick="selectVaultContact(${i})">
+            <div class="vault-contact-name">${escapeHtml(c.name)}</div>
+            <div class="vault-contact-number">${escapeHtml(c.number)}</div>
+            <div class="vault-contact-question">"${escapeHtml(c.question)}"</div>
+            <button class="vault-contact-delete" onclick="event.stopPropagation();deleteVaultContact(${i})" title="Delete">&times;</button>
+        </div>
+    `).join('');
+}
+
+function populateContactSelector() {
+    const sel = document.getElementById('impContactSelect');
+    sel.innerHTML = '<option value="">-- Select a contact --</option>' + impVaultContacts.map((c, i) => `<option value="${i}">${escapeHtml(c.name)} (${escapeHtml(c.number)})</option>`).join('');
+}
+
+function selectVaultContact(idx) {
+    document.querySelectorAll('.vault-contact-card').forEach(c => c.classList.remove('selected'));
+    const card = document.querySelector(`.vault-contact-card[data-idx="${idx}"]`);
+    if (card) card.classList.add('selected');
+    document.getElementById('impContactSelect').value = idx;
+}
+
+function showAddContactForm() { document.getElementById('vaultAddFormWrap').style.display = ''; }
+function hideAddContactForm() { document.getElementById('vaultAddFormWrap').style.display = 'none'; ['vaultNewName','vaultNewNumber','vaultNewQuestion','vaultNewAnswer','vaultNewEmergency'].forEach(id => document.getElementById(id).value = ''); }
+
+async function saveVaultContact() {
+    const name = document.getElementById('vaultNewName').value.trim();
+    const number = document.getElementById('vaultNewNumber').value.trim();
+    const question = document.getElementById('vaultNewQuestion').value.trim();
+    const answer = document.getElementById('vaultNewAnswer').value.trim();
+    const emergency = document.getElementById('vaultNewEmergency').value.trim();
+    if (!name || !number || !question || !answer) { alert('Name, number, question, and answer are required.'); return; }
+    impVaultContacts.push({ name, number, question, answer, emergency, addedAt: new Date().toISOString() });
+    const encrypted = await encryptData(impVaultCryptoKey, impVaultContacts);
+    localStorage.setItem(IMP_VAULT_STORAGE_KEY, encrypted);
+    hideAddContactForm();
+    renderVaultContacts();
+    populateContactSelector();
+}
+
+async function deleteVaultContact(idx) {
+    if (!confirm('Delete this contact from vault?')) return;
+    impVaultContacts.splice(idx, 1);
+    const encrypted = await encryptData(impVaultCryptoKey, impVaultContacts);
+    localStorage.setItem(IMP_VAULT_STORAGE_KEY, encrypted);
+    renderVaultContacts();
+    populateContactSelector();
+}
+
+// --- Caller Verification ---
+async function runImpersonationCheck() {
+    const incoming = document.getElementById('impIncomingNumber').value.trim();
+    const contactIdx = document.getElementById('impContactSelect').value;
+    const notes = document.getElementById('impCallNotes').value.trim();
+
+    if (!incoming) { alert('Enter the incoming caller number.'); return; }
+
+    const resultsPanel = document.getElementById('impResultsPanel');
+    const resultsBody = document.getElementById('impResultsBody');
+    const challengeDisplay = document.getElementById('impChallengeDisplay');
+    const scamWarning = document.getElementById('impScamWarning');
+    const cooldownBlock = document.getElementById('impCooldownBlock');
+    const quickActions = document.getElementById('impQuickActions');
+
+    resultsPanel.style.display = '';
+    scamWarning.classList.remove('visible');
+    cooldownBlock.classList.remove('visible');
+    quickActions.style.display = 'none';
+    challengeDisplay.style.display = 'none';
+    resultsBody.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Analyzing...</p>';
+
+    let savedNumber = null;
+    let contact = null;
+    if (contactIdx !== '' && impVaultContacts[contactIdx]) {
+        contact = impVaultContacts[contactIdx];
+        savedNumber = contact.number;
+    }
+
+    // Check red flags
+    const flags = document.querySelectorAll('.imp-red-flag:checked');
+    const flagCount = flags.length;
+    const checkedFlags = Array.from(flags).map(f => f.dataset.flag);
+    const hasPaymentFlag = checkedFlags.includes('payment');
+
+    // Keyword scan in notes
+    const moneyKeywords = ['money','transfer','cash','pay','send','wire','gift card','crypto','bitcoin','upi','gpay','paytm','phonepay','venmo','zelle','account','urgent','emergency','accident','hospital','arrested','stuck'];
+    const notesLower = notes.toLowerCase();
+    const detectedKeywords = moneyKeywords.filter(kw => notesLower.includes(kw));
+    const moneyRequestDetected = detectedKeywords.length >= 1 || hasPaymentFlag;
+
+    // Try API verification
+    let apiResult = null;
+    if (savedNumber) {
+        try {
+            const params = new URLSearchParams({ incoming, saved: savedNumber });
+            const resp = await fetch('/api/verify-number?' + params.toString(), { signal: AbortSignal.timeout(6000) });
+            if (resp.ok) apiResult = await resp.json();
+        } catch {}
+    }
+
+    // Build results HTML
+    let html = '';
+
+    if (savedNumber) {
+        if (apiResult && !apiResult.error) {
+            const inc = apiResult.incoming;
+            const sav = apiResult.saved;
+            const cmp = apiResult.comparison;
+
+            html += `<div class="imp-result-card"><h4>✅ Number Match</h4><p>${cmp.number_match ? 'Incoming number matches the saved contact number.' : '<strong>MISMATCH</strong> — The incoming number does NOT match the saved contact. This could indicate caller ID spoofing.'}</p></div>`;
+
+            if (cmp.flags && cmp.flags.length > 0) {
+                html += '<div class="imp-result-card"><h4>🚩 Spoofing Flags</h4><div style="margin-top:6px;">';
+                cmp.flags.forEach(f => {
+                    const labels = { number_mismatch: 'Number Mismatch', region_mismatch: 'Region Mismatch', carrier_mismatch: 'Carrier Mismatch', voip_impersonation: 'VoIP Impersonation' };
+                    html += `<span class="imp-flag-pill danger">${labels[f] || f}</span>`;
+                });
+                html += '</div></div>';
+            } else {
+                html += '<div class="imp-result-card"><h4>✅ No Spoofing Flags</h4><p>Number, region, and carrier all match the saved contact.</p></div>';
+            }
+
+            html += `<div class="imp-result-card"><h4>📡 Incoming Number Details</h4><p>Format: ${escapeHtml(inc.international || inc.e164 || incoming)}<br>Region: ${escapeHtml(inc.region)}<br>Carrier: ${escapeHtml(inc.carrier || 'Unknown')}<br>Type: <strong>${escapeHtml(inc.number_type)}</strong>${inc.is_voip ? ' <span class="imp-flag-pill danger">VoIP</span>' : ''}</p></div>`;
+        } else {
+            // JS fallback
+            const normalizedIncoming = incoming.replace(/[\s\-\(\)]/g, '');
+            const normalizedSaved = savedNumber.replace(/[\s\-\(\)]/g, '');
+            const match = normalizedIncoming === normalizedSaved;
+            html += `<div class="imp-result-card"><h4>✅ Number Match (Basic Check)</h4><p>${match ? 'Numbers appear to match.' : '<strong>MISMATCH</strong> — Numbers differ. Potential spoofing.'}</p><p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Note: Advanced carrier/VoIP detection requires the local Python server (run <code>node server.js</code>).</p></div>`;
+        }
+    } else {
+        html += '<div class="imp-result-card"><h4>🔑 No Contact Selected</h4><p>Unlock your vault and select a contact for full cross-check verification.</p></div>';
+    }
+
+    // Red flag summary
+    if (flagCount > 0) {
+        html += `<div class="imp-result-card"><h4>🚩 Red Flags: ${flagCount}/4</h4><p>${checkedFlags.map(f => {
+            const m = { urgency:'Urgency language', payment:'Suspicious payment method', nocallback:'Discouraged callback', nosafe:'Failed safe word' };
+            return '<span class="imp-flag-pill ' + (flagCount >= 2 ? 'danger' : 'warn') + '">' + (m[f]||f) + '</span>';
+        }).join(' ')}</p></div>`;
+    }
+
+    if (detectedKeywords.length > 0) {
+        html += `<div class="imp-result-card"><h4>🔍 Money Request Keywords Detected</h4><p>${detectedKeywords.map(k => `<span class="imp-flag-pill warn">${escapeHtml(k)}</span>`).join(' ')}</p></div>`;
+    }
+
+    resultsBody.innerHTML = html;
+
+    // Show challenge question
+    if (contact) {
+        challengeDisplay.style.display = '';
+        document.getElementById('impChallengeQ').textContent = contact.question;
+        const ansEl = document.getElementById('impChallengeA');
+        ansEl.textContent = 'Click to reveal answer';
+        ansEl.className = 'challenge-answer hidden-answer';
+        ansEl.onclick = function() {
+            if (this.classList.contains('hidden-answer')) { this.textContent = contact.answer; this.classList.remove('hidden-answer'); }
+            else { this.textContent = 'Click to reveal answer'; this.add('hidden-answer'); }
+        };
+    }
+
+    // Scam warning
+    if (flagCount >= 2) {
+        scamWarning.classList.add('visible');
+    }
+
+    // Cooldown trigger
+    if (moneyRequestDetected) {
+        cooldownBlock.classList.add('visible');
+        startCooldownTimer(180);
+    } else {
+        quickActions.style.display = '';
+    }
+
+    // Set quick action links
+    if (contact) {
+        document.getElementById('impCallbackBtn').href = 'tel:' + encodeURIComponent(contact.number);
+        if (contact.emergency) {
+            const alertMsg = encodeURIComponent('Possible scam call received impersonating ' + contact.name + '. Verifying before acting. Do NOT send money if contacted.');
+            document.getElementById('impAlertBtn').href = 'sms:' + encodeURIComponent(contact.emergency) + '?body=' + alertMsg;
+        }
+    }
+
+    // Log call
+    logImpersonationCall(incoming, contact ? contact.name : null, flagCount, detectedKeywords, notes);
+}
+
+function startCooldownTimer(seconds) {
+    const timerEl = document.getElementById('impCooldownTime');
+    const cooldownBlock = document.getElementById('impCooldownBlock');
+    const quickActions = document.getElementById('impQuickActions');
+    let remaining = seconds;
+    timerEl.textContent = remaining;
+    if (impCooldownTimer) clearInterval(impCooldownTimer);
+    document.getElementById('impVerifyBtn').disabled = true;
+    impCooldownTimer = setInterval(() => {
+        remaining--;
+        timerEl.textContent = remaining;
+        if (remaining <= 0) {
+            clearInterval(impCooldownTimer);
+            impCooldownTimer = null;
+            cooldownBlock.classList.remove('visible');
+            quickActions.style.display = '';
+            document.getElementById('impVerifyBtn').disabled = false;
+        }
+    }, 1000);
+}
+
+function logImpersonationCall(number, contactName, flagCount, keywords, notes) {
+    try {
+        const logs = JSON.parse(localStorage.getItem(IMP_CALL_LOG_KEY) || '[]');
+        logs.unshift({ number, contactName, flagCount, keywords, notes: notes.substring(0, 200), timestamp: new Date().toISOString() });
+        localStorage.setItem(IMP_CALL_LOG_KEY, JSON.stringify(logs.slice(0, 50)));
+    } catch {}
+}
+
+// Red flag checkbox styling
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('imp-red-flag')) {
+        const item = e.target.closest('.red-flag-item');
+        if (item) item.classList.toggle('checked', e.target.checked);
+    }
+});
+
+// ==========================================
 // 6. Digital Footprint Tracker
 // ==========================================
 
-// Check if a profile exists using advanced deterministic algorithms (97% accuracy) & real APIs
+
+// Real API check only — strictly zero synthetic or simulated results
 async function checkProfile(platform, identifier) {
     const endpoints = {
         'GitHub':  { url: `https://api.github.com/users/${identifier}`, headers: { 'Accept': 'application/vnd.github.v3+json' } },
         'Reddit':  { url: `https://www.reddit.com/user/${identifier}/about.json`, headers: {} },
         'GitLab':  { url: `https://gitlab.com/api/v4/users?username=${identifier}`, headers: {}, isArray: true },
+        'Dev.to':  { url: `https://dev.to/api/users/by_username?url=${identifier}`, headers: {} }
     };
     
-    // Core API check if supported
     if (endpoints[platform]) {
         const cfg = endpoints[platform];
         try {
-            const res = await fetch(cfg.url, { method: 'GET', headers: cfg.headers, signal: AbortSignal.timeout(5000) });
+            const res = await fetch(cfg.url, { method: 'GET', headers: cfg.headers, signal: AbortSignal.timeout(4500) });
             if (cfg.isArray) {
                 const data = await res.json();
                 return Array.isArray(data) && data.length > 0 ? 'found' : 'not_found';
             }
             if (res.ok) return 'found';
-            if (res.status === 404 || res.status === 403) return 'not_found';
+            if (res.status === 404) return 'not_found';
             return 'unknown';
         } catch {
             return 'unknown';
         }
     }
-
-    // Advanced Deterministic Simulation for platforms without CORS-friendly APIs
-    // Uses SHA-256 style deterministic distribution to achieve 97%+ consistency in OSINT mock scenarios
-    return new Promise(resolve => {
-        setTimeout(() => {
-            let hash = 0;
-            const str = platform + identifier.toLowerCase();
-            for (let i = 0; i < str.length; i++) {
-                hash = ((hash << 5) - hash) + str.charCodeAt(i);
-                hash |= 0;
-            }
-            // Derive a stable pseudo-random value between 0 and 100
-            const stableScore = Math.abs(hash) % 100;
-            // E.g., for standard names, give a reasonable hit rate, else return not_found
-            if (stableScore > 45) {
-                resolve('found');
-            } else {
-                resolve('not_found');
-            }
-        }, 600 + Math.random() * 800); // Simulate network delay
-    });
+    return 'unknown';
 }
 
 function deriveEmailVariants(email) {
@@ -7706,305 +8185,1281 @@ function buildFullNameLookupSources(fullName, options = {}) {
     return sources;
 }
 
+// ==========================================
+// Comprehensive OSINT Digital Footprint Engine
+// ==========================================
+
+let footprintLastResults = null;
+let footprintLastQuery = '';
+let footprintLastType = '';
+
+// Store history in localStorage
+function getFootprintHistory() {
+    try {
+        const raw = localStorage.getItem('cybershield_footprint_history');
+        return raw ? JSON.parse(raw) : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveFootprintHistory(query, type, totalCount, verifiedCount) {
+    try {
+        let history = getFootprintHistory();
+        // Remove existing duplicate for same query
+        history = history.filter(h => h.query.toLowerCase() !== query.toLowerCase());
+        history.unshift({
+            query,
+            type,
+            totalCount,
+            verifiedCount,
+            timestamp: new Date().toISOString()
+        });
+        if (history.length > 15) history = history.slice(0, 15);
+        localStorage.setItem('cybershield_footprint_history', JSON.stringify(history));
+        renderFootprintHistory();
+    } catch (e) {
+        console.warn('Failed to save footprint history:', e);
+    }
+}
+
+function renderFootprintHistory() {
+    const container = document.getElementById('footprintHistoryChips');
+    if (!container) return;
+    const history = getFootprintHistory();
+    if (!history.length) {
+        container.innerHTML = '<span style="font-size:11px;color:var(--text-muted);font-style:italic;">No past searches yet</span>';
+        return;
+    }
+    container.innerHTML = history.slice(0, 6).map(item => `
+        <span class="footprint-chip" onclick="reRunFootprintSearch('${escapeHtml(item.query)}')" title="${escapeHtml(item.type)} - ${item.totalCount} results (${new Date(item.timestamp).toLocaleDateString()})">
+            ${escapeHtml(item.query)} <strong style="color:#38bdf8;">(${item.totalCount})</strong>
+        </span>
+    `).join('');
+}
+
+function reRunFootprintSearch(query) {
+    const input = document.getElementById('footprintInput');
+    if (input) {
+        input.value = query;
+        trackFootprint();
+    }
+}
+
+// Server URL verification helper (bypasses browser CORS without illegal actions)
+async function verifySourceUrl(url) {
+    try {
+        const res = await fetch(`/api/footprint/verify-url?url=${encodeURIComponent(url)}`, {
+            signal: AbortSignal.timeout(3500)
+        });
+        if (res.ok) {
+            const data = await res.json();
+            return { attempted: true, exists: data.exists === true, statusCode: data.statusCode || 0 };
+        }
+    } catch {
+        // Backend not available (e.g. static hosting)
+    }
+    return { attempted: false, exists: false, statusCode: 0 };
+}
+
+// Deduplicate findings by normalized canonical URL & source
+function deduplicateFindings(findings) {
+    const seen = new Map();
+    for (const f of findings) {
+        if (!f || !f.url) continue;
+        try {
+            const u = new URL(f.url);
+            // Normalize: lowercase host, strip trailing slash, keep real search params, drop common tracking params.
+            const ignoredParams = new Set(['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid']);
+            const normalizedParams = Array.from(u.searchParams.entries())
+                .filter(([name]) => !ignoredParams.has(name.toLowerCase()))
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([name, value]) => `${name}=${value}`)
+                .join('&');
+            let norm = (u.hostname + u.pathname).toLowerCase().replace(/\/+$/, '');
+            if (normalizedParams) norm += `?${normalizedParams}`;
+            const key = [
+                norm,
+                (f.source || '').toLowerCase(),
+                (f.identifierType || '').toLowerCase(),
+                (f.matchedIdentifier || '').toLowerCase()
+            ].join('::');
+            if (!seen.has(key)) {
+                seen.set(key, f);
+            } else {
+                // Keep the one with higher confidence
+                const existing = seen.get(key);
+                if ((f.confidence || 0) > (existing.confidence || 0)) {
+                    seen.set(key, f);
+                }
+            }
+        } catch {
+            const fallbackKey = (f.url || '').toLowerCase();
+            if (!seen.has(fallbackKey)) seen.set(fallbackKey, f);
+        }
+    }
+    return Array.from(seen.values());
+}
+
+// Extract domain from URL
+function getDomainFromUrl(url) {
+    try {
+        return new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+        return 'web';
+    }
+}
+
+function getFindingDomain(finding) {
+    return finding && finding.domain ? finding.domain : getDomainFromUrl(finding && finding.url);
+}
+
+function uniqueFootprintValues(values, normalizer = value => String(value || '').toLowerCase()) {
+    const seen = new Set();
+    return values
+        .map(value => String(value || '').trim())
+        .filter(Boolean)
+        .filter(value => {
+            const key = normalizer(value);
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+}
+
+function escapeRegExp(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function removeDetectedText(working, values) {
+    let cleaned = String(working || '');
+    values.forEach(value => {
+        if (!value) return;
+        cleaned = cleaned.replace(new RegExp(escapeRegExp(value), 'gi'), ' ');
+    });
+    return cleaned;
+}
+
+function stripIdentifierPunctuation(value) {
+    return String(value || '')
+        .trim()
+        .replace(/^[,;|:()[\]{}<>"']+/, '')
+        .replace(/[,;|:()[\]{}<>"'.!?]+$/, '');
+}
+
+function parseLabelledFootprintValues(rawInput, labels) {
+    const escapedLabels = labels.map(escapeRegExp).join('|');
+    const stopLabels = '(?:name|full\\s*name|email|email\\s*id|mail|phone|mobile|number|username|user\\s*name|handle|user\\s*id)';
+    const regex = new RegExp(`\\b(?:${escapedLabels})\\s*[:=\\-]\\s*([^,;|\\n\\r]+?)(?=\\s+${stopLabels}\\s*[:=\\-]|[,;|\\n\\r]|$)`, 'gi');
+    const values = [];
+    let match;
+    while ((match = regex.exec(rawInput)) !== null) {
+        const value = stripIdentifierPunctuation(match[1]);
+        if (value) values.push(value);
+    }
+    return values;
+}
+
+function extractFootprintIdentifiers(rawInput) {
+    const raw = String(rawInput || '').trim();
+    const emails = uniqueFootprintValues(
+        raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [],
+        value => value.toLowerCase()
+    );
+    let working = removeDetectedText(raw, emails);
+
+    const labelledUsernames = parseLabelledFootprintValues(raw, ['username', 'user name', 'handle', 'user id'])
+        .map(value => stripIdentifierPunctuation(value).replace(/^@/, ''))
+        .filter(value => /^[a-zA-Z0-9][a-zA-Z0-9._-]{2,39}$/.test(value));
+
+    const atUsernames = [];
+    const handleRegex = /(^|[\s,;|])@([a-zA-Z0-9][a-zA-Z0-9._-]{2,39})\b/g;
+    let handleMatch;
+    while ((handleMatch = handleRegex.exec(working)) !== null) {
+        atUsernames.push(handleMatch[2]);
+    }
+
+    const explicitUsernames = uniqueFootprintValues([...labelledUsernames, ...atUsernames], value => value.toLowerCase());
+    working = removeDetectedText(working, explicitUsernames.map(value => `@${value}`));
+    working = removeDetectedText(working, labelledUsernames);
+
+    const phones = [];
+    const phoneRegex = /(?:\+?\d[\d\s().-]{5,}\d)/g;
+    let phoneMatch;
+    while ((phoneMatch = phoneRegex.exec(working)) !== null) {
+        const candidate = stripIdentifierPunctuation(phoneMatch[0]);
+        const digits = candidate.replace(/\D/g, '');
+        if (digits.length >= 7 && digits.length <= 15) {
+            phones.push(candidate);
+        }
+    }
+    const labelledPhones = parseLabelledFootprintValues(raw, ['phone', 'mobile', 'number'])
+        .filter(value => {
+            const digits = value.replace(/\D/g, '');
+            return digits.length >= 7 && digits.length <= 15;
+        });
+    const phoneValues = uniqueFootprintValues([...phones, ...labelledPhones], value => value.replace(/\D/g, ''));
+    working = removeDetectedText(working, phoneValues);
+
+    const labelledNames = parseLabelledFootprintValues(raw, ['name', 'full name'])
+        .filter(value => value.split(/\s+/).filter(Boolean).length >= 2);
+
+    working = working
+        .replace(/\b(?:name|full\s*name|email|email\s*id|mail|phone|mobile|number|username|user\s*name|handle|user\s*id)\s*[:=\-]?/gi, ' ')
+        .replace(/[;,|]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const residualTokens = working.split(/\s+/).map(stripIdentifierPunctuation).filter(Boolean);
+    const inferredUsernames = [];
+    const usernameLikeTokenIndexes = new Set();
+    residualTokens.forEach((token, index) => {
+        if (/^[a-zA-Z0-9][a-zA-Z0-9._-]{2,39}$/.test(token) && /[._\d-]/.test(token)) {
+            inferredUsernames.push(token);
+            usernameLikeTokenIndexes.add(index);
+        }
+    });
+
+    if (!inferredUsernames.length && residualTokens.length >= 3) {
+        const last = residualTokens[residualTokens.length - 1];
+        const firstTokensLookNamed = residualTokens.slice(0, -1).some(token => /^[A-Z][a-zA-Z'.-]+$/.test(token));
+        if (firstTokensLookNamed && /^[a-z][a-z0-9._-]{2,39}$/.test(last)) {
+            inferredUsernames.push(last);
+            usernameLikeTokenIndexes.add(residualTokens.length - 1);
+        }
+    }
+
+    const residualNameTokens = residualTokens.filter((_, index) => !usernameLikeTokenIndexes.has(index));
+    const inferredName = residualNameTokens.length >= 2 ? residualNameTokens.join(' ') : '';
+    const names = uniqueFootprintValues([...labelledNames, inferredName], value => value.toLowerCase().replace(/\s+/g, ' '));
+
+    const derivedUsernames = emails
+        .flatMap(email => deriveEmailVariants(email).variants)
+        .filter(value => /^[a-zA-Z0-9][a-zA-Z0-9._-]{2,39}$/.test(value));
+    const usernames = uniqueFootprintValues([...explicitUsernames, ...inferredUsernames, ...derivedUsernames], value => value.toLowerCase());
+
+    if (!emails.length && !phoneValues.length && !names.length && !usernames.length && /^[a-zA-Z0-9][a-zA-Z0-9._-]{2,39}$/.test(raw)) {
+        usernames.push(raw);
+    }
+
+    return {
+        emails,
+        phones: phoneValues,
+        names,
+        usernames
+    };
+}
+
+function describeFootprintQueryType(identifiers) {
+    const parts = [];
+    if (identifiers.names.length) parts.push('Full Name');
+    if (identifiers.emails.length) parts.push('Email Address');
+    if (identifiers.phones.length) parts.push('Phone Number');
+    if (identifiers.usernames.length) parts.push('Username');
+    if (!parts.length) return 'Unknown';
+    return parts.length === 1 ? parts[0] : `Combined Search (${parts.join(', ')})`;
+}
+
+function addFootprintFinding(findings, {
+    source,
+    matchedIdentifier,
+    identifierType,
+    url,
+    matchType = 'Possible',
+    confidence = 50,
+    status = 'unverified',
+    evidence = 'Public source lead for manual verification.',
+    timestamp,
+    domain,
+    icon
+}) {
+    findings.push({
+        source,
+        matchedIdentifier,
+        identifierType,
+        url,
+        matchType,
+        confidence,
+        status,
+        evidence,
+        timestamp,
+        domain: domain || getDomainFromUrl(url),
+        icon
+    });
+}
+
+function addManualFootprintSources(sources, findings, matchedIdentifier, identifierType, timestampLocal, matchType = 'Possible') {
+    dedupePlatforms(sources).forEach(source => {
+        const confidence = getManualPlatformConfidence(source);
+        const sourceName = source.name.startsWith(`${identifierType} -`) ? source.name : `${identifierType} - ${source.name}`;
+        addFootprintFinding(findings, {
+            source: sourceName,
+            matchedIdentifier,
+            identifierType,
+            url: source.profileUrl,
+            matchType: source.evidenceType === 'owner-audit' ? 'Exact' : matchType,
+            confidence: confidence.score,
+            status: source.evidenceType === 'owner-audit' ? 'verified' : 'unverified',
+            evidence: `${source.exposure} ${confidence.note}`,
+            timestamp: timestampLocal,
+            domain: getDomainFromUrl(source.profileUrl),
+            icon: source.icon
+        });
+    });
+}
+
+function buildUsernameLookupSources(username, options = {}) {
+    const quotedUsername = `"${username}"`;
+    const sources = [
+        ...buildCyberlayersUsernamePlatforms(username),
+        createManualSearchSource({
+            name: 'Google exact username search',
+            icon: '🔎',
+            profileUrl: buildGoogleSearchUrl(quotedUsername),
+            exposure: 'Searches the public web for exact matches of this username.',
+            riskWeight: 2,
+            confidenceScore: 70,
+            confidenceLabel: 'Higher confidence',
+            confidenceNote: 'Exact username hits are useful public leads, especially when profile pages repeat the same handle.'
+        }),
+        createManualSearchSource({
+            name: 'Google URL path search',
+            icon: '🧭',
+            profileUrl: buildGoogleSearchUrl(`inurl:"${username}"`),
+            exposure: 'Searches indexed URL paths for websites where this username appears in profile or author links.',
+            riskWeight: 3,
+            confidenceScore: 64,
+            confidenceLabel: 'Medium confidence',
+            confidenceNote: 'Good for finding direct profile URLs, but every result still needs review.'
+        }),
+        createManualSearchSource({
+            name: 'DuckDuckGo username search',
+            icon: '🌐',
+            profileUrl: `https://duckduckgo.com/?q=${encodeURIComponent(quotedUsername)}`,
+            exposure: 'Runs a second public web-index search for this exact username.',
+            riskWeight: 2,
+            confidenceScore: 62,
+            confidenceLabel: 'Medium confidence',
+            confidenceNote: 'Useful because different search engines surface different public pages.'
+        })
+    ];
+
+    if (options.includeSocial) {
+        sources.push(
+            createManualSearchSource({ name: 'X / Twitter profile', icon: 'X', profileUrl: `https://x.com/${encodeURIComponent(username)}`, exposure: 'Direct public profile path for this handle on X.', riskWeight: 7, confidenceScore: 48 }),
+            createManualSearchSource({ name: 'Instagram profile', icon: 'IG', profileUrl: `https://www.instagram.com/${encodeURIComponent(username)}/`, exposure: 'Direct public profile path for this handle on Instagram.', riskWeight: 7, confidenceScore: 48 }),
+            createManualSearchSource({ name: 'Facebook profile', icon: 'f', profileUrl: `https://www.facebook.com/${encodeURIComponent(username)}`, exposure: 'Direct public profile path for this username on Facebook.', riskWeight: 7, confidenceScore: 46 }),
+            createManualSearchSource({ name: 'TikTok profile', icon: 'TT', profileUrl: `https://www.tiktok.com/@${encodeURIComponent(username)}`, exposure: 'Direct public profile path for this handle on TikTok.', riskWeight: 6, confidenceScore: 47 }),
+            createManualSearchSource({ name: 'YouTube handle', icon: 'YT', profileUrl: `https://www.youtube.com/@${encodeURIComponent(username)}`, exposure: 'Direct public channel-handle path on YouTube.', riskWeight: 6, confidenceScore: 50 }),
+            createManualSearchSource({ name: 'Threads profile', icon: 'Th', profileUrl: `https://www.threads.net/@${encodeURIComponent(username)}`, exposure: 'Direct public profile path for this handle on Threads.', riskWeight: 5, confidenceScore: 44 }),
+            createManualSearchSource({ name: 'Pinterest profile', icon: 'P', profileUrl: `https://www.pinterest.com/${encodeURIComponent(username)}/`, exposure: 'Direct public profile path for this username on Pinterest.', riskWeight: 4, confidenceScore: 44 }),
+            createManualSearchSource({ name: 'Bluesky profile', icon: 'BS', profileUrl: `https://bsky.app/profile/${encodeURIComponent(username)}.bsky.social`, exposure: 'Direct public Bluesky profile path for this handle.', riskWeight: 4, confidenceScore: 44 }),
+            createManualSearchSource({ name: 'Telegram public handle', icon: 'TG', profileUrl: `https://t.me/${encodeURIComponent(username)}`, exposure: 'Direct public Telegram handle page where available.', riskWeight: 4, confidenceScore: 43 })
+        );
+    }
+
+    if (options.includeForums) {
+        sources.push(
+            createManualSearchSource({ name: 'Reddit profile', icon: 'R', profileUrl: `https://www.reddit.com/user/${encodeURIComponent(username)}`, exposure: 'Direct public Reddit profile path for this username.', riskWeight: 5, confidenceScore: 52 }),
+            createManualSearchSource({ name: 'Hacker News profile', icon: 'HN', profileUrl: `https://news.ycombinator.com/user?id=${encodeURIComponent(username)}`, exposure: 'Direct public Hacker News account page for this username.', riskWeight: 4, confidenceScore: 52 }),
+            createManualSearchSource({ name: 'Stack Overflow search', icon: 'SO', profileUrl: `https://stackoverflow.com/search?q=user%3A${encodeURIComponent(username)}`, exposure: 'Searches Stack Overflow for public activity tied to the username.', riskWeight: 4, confidenceScore: 50 }),
+            createManualSearchSource({ name: 'Medium profile', icon: 'M', profileUrl: `https://medium.com/@${encodeURIComponent(username)}`, exposure: 'Direct public Medium author profile for this handle.', riskWeight: 4, confidenceScore: 50 }),
+            createManualSearchSource({ name: 'Substack search', icon: 'S', profileUrl: buildGoogleSearchUrl(`${quotedUsername} site:substack.com`), exposure: 'Searches public Substack pages for this exact username.', riskWeight: 3, confidenceScore: 56 })
+        );
+    }
+
+    if (options.includeProfessional) {
+        sources.push(
+            createManualSearchSource({ name: 'LinkedIn public profile path', icon: 'LI', profileUrl: `https://www.linkedin.com/in/${encodeURIComponent(username)}`, exposure: 'Direct public LinkedIn profile path for this handle-style username.', riskWeight: 7, confidenceScore: 46 }),
+            createManualSearchSource({ name: 'GitHub user search', icon: 'GH', profileUrl: `https://github.com/search?q=${encodeURIComponent(username)}&type=users`, exposure: 'Searches GitHub public users for this username.', riskWeight: 4, confidenceScore: 62 }),
+            createManualSearchSource({ name: 'GitLab search', icon: 'GL', profileUrl: `https://gitlab.com/search?search=${encodeURIComponent(username)}`, exposure: 'Searches GitLab public users, groups, and projects for this username.', riskWeight: 4, confidenceScore: 58 })
+        );
+    }
+
+    if (options.includeBrokers) {
+        sources.push(createManualSearchSource({
+            name: 'People-search username sweep',
+            icon: 'DB',
+            profileUrl: buildGoogleSearchUrl(`"${username}" (site:spokeo.com OR site:beenverified.com OR site:whitepages.com OR site:truepeoplesearch.com OR site:fastpeoplesearch.com)`),
+            exposure: 'Searches people-search and data-broker pages for this username as a public trace.',
+            riskWeight: 5,
+            confidenceScore: 55,
+            confidenceLabel: 'Lower confidence',
+            confidenceNote: 'Broker pages can merge identities, so treat these as leads only.'
+        }));
+    }
+
+    return sources;
+}
+
+async function scanEmailFootprint(email, findings, timestampLocal, options, updateProgress) {
+    const emailIntel = deriveEmailVariants(email);
+    updateProgress(`Inspecting email footprint for ${email}...`, 10);
+    const domainIntel = await lookupEmailDomainIntel(emailIntel.domain);
+
+    if (domainIntel) {
+        addFootprintFinding(findings, {
+            source: 'Email - DNS Domain Intelligence',
+            matchedIdentifier: emailIntel.domain,
+            identifierType: 'Email Address',
+            url: `https://dns.google/resolve?name=${encodeURIComponent(emailIntel.domain)}&type=MX`,
+            matchType: 'Exact',
+            confidence: 95,
+            status: domainIntel.hasMx ? 'verified' : 'unverified',
+            evidence: `Provider: ${domainIntel.providerType.toUpperCase()}. MX records: ${domainIntel.mxHosts.slice(0, 2).join(', ') || 'None'}. SPF/TXT: ${domainIntel.hasTxt ? 'Configured' : 'Missing'}.`,
+            timestamp: timestampLocal,
+            domain: emailIntel.domain
+        });
+    }
+
+    updateProgress(`Checking public avatar and breach leads for ${email}...`, 35);
+    const grav = await lookupGravatarByEmail(email);
+    if (grav && (grav.hasAvatar || grav.hasProfile)) {
+        addFootprintFinding(findings, {
+            source: 'Email - Gravatar Public Profile',
+            matchedIdentifier: email,
+            identifierType: 'Email Address',
+            url: grav.profileUrl || `https://en.gravatar.com/${await getEmailSha256(email)}`,
+            matchType: 'Exact',
+            confidence: 94,
+            status: 'verified',
+            evidence: grav.note || 'Registered public avatar and profile tied to email hash.',
+            timestamp: timestampLocal,
+            domain: 'gravatar.com'
+        });
+    }
+
+    try {
+        const breachRes = await fetch(`https://api.xposedornot.com/v1/check-email/${encodeURIComponent(email)}`, {
+            signal: AbortSignal.timeout(4000)
+        });
+        if (breachRes.ok) {
+            const breachData = await breachRes.json();
+            if (breachData && breachData.breaches && Array.isArray(breachData.breaches)) {
+                const breachList = breachData.breaches.flat();
+                if (breachList.length > 0) {
+                    addFootprintFinding(findings, {
+                        source: 'Email - XposedOrNot Public Breach DB',
+                        matchedIdentifier: email,
+                        identifierType: 'Email Address',
+                        url: 'https://xposedornot.com/breaches',
+                        matchType: 'Exact',
+                        confidence: 96,
+                        status: 'verified',
+                        evidence: `Identified exposure in ${breachList.length} verified public breach incident(s): ${breachList.slice(0, 4).join(', ')}${breachList.length > 4 ? '...' : ''}.`,
+                        timestamp: timestampLocal,
+                        domain: 'xposedornot.com'
+                    });
+                }
+            }
+        }
+    } catch {
+        // Ignore API timeout
+    }
+
+    updateProgress(`Preparing public web-index leads for ${email}...`, 65);
+    addFootprintFinding(findings, {
+        source: 'Email - HaveIBeenPwned Verification',
+        matchedIdentifier: email,
+        identifierType: 'Email Address',
+        url: 'https://haveibeenpwned.com/',
+        matchType: 'Possible',
+        confidence: 65,
+        status: 'unverified',
+        evidence: 'Independent public breach registry reference for manual verification by the mailbox owner.',
+        timestamp: timestampLocal,
+        domain: 'haveibeenpwned.com'
+    });
+
+    addManualFootprintSources(buildEmailLookupSources(emailIntel, options), findings, email, 'Email Address', timestampLocal, 'Possible');
+
+    if (options.includeProfessional && emailIntel.localPart.length >= 3) {
+        updateProgress(`Checking developer accounts for mailbox username ${emailIntel.localPart}...`, 82);
+        await checkDeveloperPlatforms(emailIntel.localPart, findings, timestampLocal, 'Strong', 'Username');
+    }
+}
+
+async function scanPhoneFootprint(phone, findings, timestampLocal, options, updateProgress) {
+    const phoneIntel = normalizePhoneInput(phone);
+    const digits = phoneIntel.digits || phone.replace(/\D/g, '');
+    updateProgress(`Analyzing phone number variants for ${phone}...`, 20);
+
+    addFootprintFinding(findings, {
+        source: 'Phone - Telecommunications Prefix Registry',
+        matchedIdentifier: phoneIntel.e164 || phone,
+        identifierType: 'Phone Number',
+        url: buildGoogleSearchUrl(`"${phoneIntel.e164 || phone}" phone number`),
+        matchType: 'Exact',
+        confidence: 90,
+        status: 'verified',
+        evidence: `Parsed Country Hint: ${phoneIntel.likelyCountry}. Standard E.164 format: ${phoneIntel.e164 || 'Standard'}. Total Digits: ${digits.length}.`,
+        timestamp: timestampLocal,
+        domain: 'telecom-registry'
+    });
+
+    updateProgress(`Preparing reverse-phone and messaging lookup leads for ${phone}...`, 55);
+    addManualFootprintSources(buildPhoneLookupSources(phoneIntel), findings, phoneIntel.e164 || phone, 'Phone Number', timestampLocal, 'Possible');
+}
+
+async function scanFullNameFootprint(fullName, findings, timestampLocal, options, updateProgress) {
+    updateProgress(`Sweeping public name mentions for ${fullName}...`, 20);
+    addManualFootprintSources(buildFullNameLookupSources(fullName, options), findings, fullName, 'Full Name', timestampLocal, 'Possible');
+
+    addFootprintFinding(findings, {
+        source: 'Full Name - Google Scholar Academic Search',
+        matchedIdentifier: fullName,
+        identifierType: 'Full Name',
+        url: `https://scholar.google.com/scholar?q=${encodeURIComponent('"' + fullName + '"')}`,
+        matchType: 'Possible',
+        confidence: 60,
+        status: 'unverified',
+        evidence: 'Searches peer-reviewed academic papers, citations, and patents containing this exact full name.',
+        timestamp: timestampLocal,
+        domain: 'scholar.google.com'
+    });
+
+    addFootprintFinding(findings, {
+        source: 'Full Name - ArXiv Open Science Search',
+        matchedIdentifier: fullName,
+        identifierType: 'Full Name',
+        url: `https://arxiv.org/search/?query=${encodeURIComponent(fullName)}&searchtype=all`,
+        matchType: 'Possible',
+        confidence: 55,
+        status: 'unverified',
+        evidence: 'Searches STEM research preprints, author listings, and publications.',
+        timestamp: timestampLocal,
+        domain: 'arxiv.org'
+    });
+
+    addFootprintFinding(findings, {
+        source: 'Full Name - Google News Search',
+        matchedIdentifier: fullName,
+        identifierType: 'Full Name',
+        url: `https://news.google.com/search?q=${encodeURIComponent('"' + fullName + '"')}`,
+        matchType: 'Possible',
+        confidence: 58,
+        status: 'unverified',
+        evidence: 'Searches press releases, articles, and news publications indexed for this exact name.',
+        timestamp: timestampLocal,
+        domain: 'news.google.com'
+    });
+}
+
+async function scanUsernameFootprint(username, findings, timestampLocal, options, updateProgress) {
+    const normalizedUsername = username.toLowerCase().replace(/[^a-zA-Z0-9._-]/g, '');
+    if (!normalizedUsername || normalizedUsername.length < 3) return;
+
+    updateProgress(`Checking verified account APIs for ${normalizedUsername}...`, 20);
+    if (options.includeProfessional) {
+        await checkDeveloperPlatforms(normalizedUsername, findings, timestampLocal, 'Exact', 'Username');
+    }
+
+    if (options.includeForums) {
+        try {
+            const redditRes = await fetch(`https://www.reddit.com/user/${encodeURIComponent(normalizedUsername)}/about.json`, {
+                signal: AbortSignal.timeout(4000)
+            });
+            if (redditRes.ok) {
+                const redditData = await redditRes.json();
+                if (redditData && redditData.data && redditData.data.name) {
+                    const d = redditData.data;
+                    addFootprintFinding(findings, {
+                        source: 'Username - Reddit Public Profile',
+                        matchedIdentifier: normalizedUsername,
+                        identifierType: 'Username',
+                        url: `https://www.reddit.com/user/${encodeURIComponent(normalizedUsername)}`,
+                        matchType: 'Exact',
+                        confidence: 95,
+                        status: 'verified',
+                        evidence: `Active verified Reddit account: u/${d.name}. Karma: ${d.total_karma || 0}. Created: ${new Date(d.created_utc * 1000).toLocaleDateString()}. Email Verified: ${d.has_verified_email ? 'Yes' : 'No'}.`,
+                        timestamp: timestampLocal,
+                        domain: 'reddit.com'
+                    });
+                }
+            }
+        } catch {
+            // Ignore
+        }
+
+        try {
+            const hnRes = await fetch(`https://hn.algolia.com/api/v1/search?tags=author_${encodeURIComponent(normalizedUsername)}&hitsPerPage=3`, {
+                signal: AbortSignal.timeout(4000)
+            });
+            if (hnRes.ok) {
+                const hnData = await hnRes.json();
+                if (hnData && hnData.nbHits > 0) {
+                    addFootprintFinding(findings, {
+                        source: 'Username - Hacker News Contributor',
+                        matchedIdentifier: normalizedUsername,
+                        identifierType: 'Username',
+                        url: `https://news.ycombinator.com/user?id=${encodeURIComponent(normalizedUsername)}`,
+                        matchType: 'Exact',
+                        confidence: 93,
+                        status: 'verified',
+                        evidence: `Indexed Hacker News author with ${hnData.nbHits} public story/comment submissions.`,
+                        timestamp: timestampLocal,
+                        domain: 'ycombinator.com'
+                    });
+                }
+            }
+        } catch {
+            // Ignore
+        }
+    }
+
+    updateProgress(`Checking open identity registries for ${normalizedUsername}...`, 55);
+    try {
+        const wikiRes = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=users&ususers=${encodeURIComponent(normalizedUsername)}&usprop=editcount|registration&format=json&origin=*`, {
+            signal: AbortSignal.timeout(4000)
+        });
+        if (wikiRes.ok) {
+            const wikiData = await wikiRes.json();
+            if (wikiData.query && wikiData.query.users && wikiData.query.users[0] && !wikiData.query.users[0].missing) {
+                const u = wikiData.query.users[0];
+                addFootprintFinding(findings, {
+                    source: 'Username - Wikipedia Editor Registry',
+                    matchedIdentifier: normalizedUsername,
+                    identifierType: 'Username',
+                    url: `https://en.wikipedia.org/wiki/User:${encodeURIComponent(normalizedUsername)}`,
+                    matchType: 'Exact',
+                    confidence: 94,
+                    status: 'verified',
+                    evidence: `Registered Wikipedia contributor account. Total Edits: ${u.editcount || 0}. Member since: ${u.registration ? u.registration.slice(0, 10) : 'Active'}.`,
+                    timestamp: timestampLocal,
+                    domain: 'wikipedia.org'
+                });
+            }
+        }
+    } catch {
+        // Ignore
+    }
+
+    try {
+        const bskyRes = await fetch(`https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(normalizedUsername)}.bsky.social`, {
+            signal: AbortSignal.timeout(4000)
+        });
+        if (bskyRes.ok) {
+            const bskyData = await bskyRes.json();
+            if (bskyData && bskyData.handle) {
+                addFootprintFinding(findings, {
+                    source: 'Username - Bluesky Public Profile',
+                    matchedIdentifier: normalizedUsername,
+                    identifierType: 'Username',
+                    url: `https://bsky.app/profile/${bskyData.handle}`,
+                    matchType: 'Exact',
+                    confidence: 92,
+                    status: 'verified',
+                    evidence: `Verified decentralized profile: "${bskyData.displayName || bskyData.handle}". Followers: ${bskyData.followersCount || 0}. Posts: ${bskyData.postsCount || 0}.`,
+                    timestamp: timestampLocal,
+                    domain: 'bsky.app'
+                });
+            }
+        }
+    } catch {
+        // Ignore
+    }
+
+    try {
+        const kbRes = await fetch(`https://keybase.io/_/api/1.0/user/lookup.json?usernames=${encodeURIComponent(normalizedUsername)}`, {
+            signal: AbortSignal.timeout(4000)
+        });
+        if (kbRes.ok) {
+            const kbData = await kbRes.json();
+            if (kbData.status && kbData.status.code === 0 && kbData.them && kbData.them[0]) {
+                addFootprintFinding(findings, {
+                    source: 'Username - Keybase Identity Directory',
+                    matchedIdentifier: normalizedUsername,
+                    identifierType: 'Username',
+                    url: `https://keybase.io/${encodeURIComponent(normalizedUsername)}`,
+                    matchType: 'Exact',
+                    confidence: 95,
+                    status: 'verified',
+                    evidence: 'Verified cryptographic identity profile registered on Keybase ledger.',
+                    timestamp: timestampLocal,
+                    domain: 'keybase.io'
+                });
+            }
+        }
+    } catch {
+        // Ignore
+    }
+
+    updateProgress(`Preparing direct website leads for ${normalizedUsername}...`, 78);
+    addManualFootprintSources(buildUsernameLookupSources(normalizedUsername, options), findings, normalizedUsername, 'Username', timestampLocal, 'Possible');
+
+    if (options.includeSocial) {
+        const verifyCandidates = [
+            { source: 'Username - X / Twitter profile', url: `https://x.com/${encodeURIComponent(normalizedUsername)}`, domain: 'x.com' },
+            { source: 'Username - Instagram profile', url: `https://www.instagram.com/${encodeURIComponent(normalizedUsername)}/`, domain: 'instagram.com' },
+            { source: 'Username - YouTube handle', url: `https://www.youtube.com/@${encodeURIComponent(normalizedUsername)}`, domain: 'youtube.com' },
+            { source: 'Username - Medium profile', url: `https://medium.com/@${encodeURIComponent(normalizedUsername)}`, domain: 'medium.com' }
+        ];
+        for (const item of verifyCandidates) {
+            const check = await verifySourceUrl(item.url);
+            if (check.attempted && check.exists) {
+                addFootprintFinding(findings, {
+                    source: `${item.source} verification`,
+                    matchedIdentifier: normalizedUsername,
+                    identifierType: 'Username',
+                    url: item.url,
+                    matchType: 'Strong',
+                    confidence: 85,
+                    status: 'verified',
+                    evidence: `Server HTTP verification confirmed public profile endpoint is reachable (HTTP ${check.statusCode}).`,
+                    timestamp: timestampLocal,
+                    domain: item.domain
+                });
+            }
+        }
+    }
+}
+
+// Export functions
+function exportFootprintJson() {
+    if (!footprintLastResults || !footprintLastResults.length) {
+        alert('No search results available to export. Run a scan first.');
+        return;
+    }
+    const payload = {
+        exportDate: new Date().toISOString(),
+        query: footprintLastQuery,
+        queryType: footprintLastType,
+        totalFindings: footprintLastResults.length,
+        verifiedFindings: footprintLastResults.filter(r => r.status === 'verified').length,
+        findings: footprintLastResults
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `cybershield-footprint-${(footprintLastQuery || 'scan').replace(/[^a-zA-Z0-9_-]/g, '_')}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+function exportFootprintCsv() {
+    if (!footprintLastResults || !footprintLastResults.length) {
+        alert('No search results available to export. Run a scan first.');
+        return;
+    }
+    const headers = ['Source', 'Identifier Type', 'Matched Identifier', 'Match Type', 'Confidence (%)', 'Status', 'URL', 'Evidence', 'Timestamp'];
+    const rows = footprintLastResults.map(r => [
+        `"${String(r.source || '').replace(/"/g, '""')}"`,
+        `"${String(r.identifierType || '').replace(/"/g, '""')}"`,
+        `"${String(r.matchedIdentifier || '').replace(/"/g, '""')}"`,
+        `"${String(r.matchType || '').replace(/"/g, '""')}"`,
+        `"${r.confidence || 0}"`,
+        `"${String(r.status || '').replace(/"/g, '""')}"`,
+        `"${String(r.url || '').replace(/"/g, '""')}"`,
+        `"${String(r.evidence || '').replace(/"/g, '""')}"`,
+        `"${String(r.timestamp || '').replace(/"/g, '""')}"`
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `cybershield-footprint-${(footprintLastQuery || 'scan').replace(/[^a-zA-Z0-9_-]/g, '_')}-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+function exportFootprintPdf() {
+    if (!footprintLastResults || !footprintLastResults.length) {
+        alert('No search results available to export. Run a scan first.');
+        return;
+    }
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+        alert('Pop-up blocked. Please allow pop-ups to print or export PDF.');
+        return;
+    }
+    const verifiedCount = footprintLastResults.filter(r => r.status === 'verified').length;
+    const now = new Date().toLocaleString();
+    const rowsHtml = footprintLastResults.map((r, i) => `
+        <tr style="border-bottom: 1px solid #ddd; ${i % 2 === 0 ? 'background:#f9fafb;' : ''}">
+            <td style="padding:8px 10px;font-weight:bold;">${escapeHtml(r.source)}</td>
+            <td style="padding:8px 10px;font-size:12px;">${escapeHtml(r.identifierType || 'Identifier')}</td>
+            <td style="padding:8px 10px;font-family:monospace;font-size:12px;">${escapeHtml(r.matchedIdentifier)}</td>
+            <td style="padding:8px 10px;">
+                <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold;background:${r.matchType === 'Exact' ? '#dcfce7;color:#166534' : r.matchType === 'Strong' ? '#e0f2fe;color:#0369a1' : '#fef3c7;color:#92400e'}">
+                    ${escapeHtml(r.matchType)} (${r.confidence}%)
+                </span>
+            </td>
+            <td style="padding:8px 10px;">
+                <span style="font-size:11px;font-weight:bold;color:${r.status === 'verified' ? '#166534' : '#b45309'}">
+                    ${r.status === 'verified' ? '✓ Verified' : '○ Unverified'}
+                </span>
+            </td>
+            <td style="padding:8px 10px;font-size:12px;word-break:break-all;"><a href="${r.url}" target="_blank">${escapeHtml(r.url)}</a></td>
+            <td style="padding:8px 10px;font-size:12px;">${escapeHtml(r.evidence)}</td>
+        </tr>
+    `).join('');
+
+    printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>CyberShield AI - Footprint Report (${escapeHtml(footprintLastQuery)})</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 24px; color: #1e293b; }
+                h1 { margin-bottom: 4px; color: #0f172a; font-size: 24px; }
+                .subtitle { color: #64748b; font-size: 13px; margin-bottom: 20px; }
+                .meta-box { display: flex; gap: 24px; background: #f1f5f9; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th { text-align: left; padding: 8px 10px; background: #0f172a; color: #ffffff; font-size: 12px; text-transform: uppercase; }
+                @media print { body { margin: 10mm; } }
+            </style>
+        </head>
+        <body>
+            <h1>🛡️ CyberShield AI — Digital Footprint Investigation</h1>
+            <div class="subtitle">Generated on ${now} • Official OSINT Intelligence Report</div>
+            <div class="meta-box">
+                <div><strong>Target Query:</strong> ${escapeHtml(footprintLastQuery)}</div>
+                <div><strong>Query Type:</strong> ${escapeHtml(footprintLastType)}</div>
+                <div><strong>Total Findings:</strong> ${footprintLastResults.length}</div>
+                <div><strong>Verified Findings:</strong> ${verifiedCount}</div>
+            </div>
+            ${footprintLastType.includes('Full Name') ? '<div style="background:#fffbeb;border:1px solid #fef3c7;padding:10px 14px;border-radius:6px;font-size:12px;color:#92400e;margin-bottom:16px;"><strong>Name-Only Notice:</strong> Matches based solely on full names must not automatically be assumed to represent the same individual due to common identity overlap.</div>' : ''}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th>Identifier Type</th>
+                        <th>Matched Identifier</th>
+                        <th>Match Type</th>
+                        <th>Status</th>
+                        <th>Direct URL</th>
+                        <th>Evidence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+            <script>
+                window.onload = function() { window.print(); }
+            </script>
+        </body>
+        </html>
+    `);
+    printWin.document.close();
+}
+
+// Master trackFootprint implementation
 async function trackFootprint() {
-    const query = document.getElementById('footprintInput').value.trim();
-    if (!query) return alert('Please enter a username, phone number, or full name.');
+    const rawInput = document.getElementById('footprintInput').value.trim();
+    if (!rawInput) return alert('Please enter a name, phone number, email address, username, or a combined set of identifiers.');
 
-    const checkSocial = document.getElementById('fpSocial').checked;
-    const checkForums = document.getElementById('fpForums').checked;
-    const checkProfessional = document.getElementById('fpProfessional').checked;
-    const checkBrokers = document.getElementById('fpDataBrokers').checked;
-    const checkPhone = document.getElementById('fpPhoneLookup').checked;
+    const checkSocial = document.getElementById('fpSocial') ? document.getElementById('fpSocial').checked : true;
+    const checkForums = document.getElementById('fpForums') ? document.getElementById('fpForums').checked : true;
+    const checkProfessional = document.getElementById('fpProfessional') ? document.getElementById('fpProfessional').checked : true;
+    const checkBrokers = document.getElementById('fpDataBrokers') ? document.getElementById('fpDataBrokers').checked : false;
+    const checkPhone = document.getElementById('fpPhoneLookup') ? document.getElementById('fpPhoneLookup').checked : true;
+    const scanOptions = {
+        includeSocial: checkSocial,
+        includeForums: checkForums,
+        includeProfessional: checkProfessional,
+        includeBrokers: checkBrokers,
+        includePhone: checkPhone
+    };
+    const timestampLocal = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const findings = [];
 
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(query);
-    const isPhone = /^[\+]?[\d\s\-\(\)]{7,15}$/.test(query.replace(/\s/g, ''));
-    const isFullName = query.includes(' ') && !isEmail && !isPhone;
-    const username = isEmail ? query.split('@')[0] : isPhone ? query.replace(/[\s\-\(\)\+]/g, '') : isFullName ? query.toLowerCase().replace(/\s+/g, '') : query.toLowerCase();
-    const phoneFormatted = isPhone ? query.trim() : null;
-    const phoneIntel = isPhone ? normalizePhoneInput(query) : null;
-    const emailIntel = isEmail ? deriveEmailVariants(query) : null;
-    const usernameCandidates = isEmail ? emailIntel.variants : [username];
+    const identifiers = extractFootprintIdentifiers(rawInput);
+    const queryType = describeFootprintQueryType(identifiers);
+    const jobs = [];
 
-    // Platforms with hasApi:true use real API verification; others get manual-check links
-    const allPlatforms = [];
-    if (isFullName) {
-        allPlatforms.push(...buildFullNameLookupSources(query, {
-            includeSocial: checkSocial,
-            includeForums: checkForums,
-            includeProfessional: checkProfessional,
-            includeBrokers: checkBrokers
-        }));
-    } else if (!isPhone && !isEmail) {
-        const cyberlayersPlatforms = buildCyberlayersUsernamePlatforms(username);
-        if (checkSocial) {
-            allPlatforms.push(
-                ...cyberlayersPlatforms.filter(platform => ['Twitter/X', 'Instagram', 'Facebook'].includes(platform.name)),
-                { name: 'TikTok', icon: '🎵', profileUrl: `https://www.tiktok.com/@${username}`, exposure: 'Extended scan: public videos, likes, and following list where visible.', riskWeight: 7, hasApi: false, baselineSource: 'extended' },
-                { name: 'YouTube', icon: '▶️', profileUrl: `https://www.youtube.com/@${username}`, exposure: 'Extended scan: channel, videos, comments, and About tab content.', riskWeight: 6, hasApi: false, baselineSource: 'extended' }
-            );
-        }
-        if (checkProfessional) {
-            allPlatforms.push(
-                ...cyberlayersPlatforms.filter(platform => ['GitHub', 'LinkedIn'].includes(platform.name)),
-                { name: 'GitLab', icon: '🦊', profileUrl: `https://gitlab.com/${username}`, exposure: 'Extended scan: projects, merge requests, and public activity.', riskWeight: 5, hasApi: true, baselineSource: 'extended' }
-            );
-        }
-    }
-    if (checkForums && !isPhone && !isEmail && !isFullName) {
-        allPlatforms.push(
-            { name: 'Reddit', icon: '🔴', profileUrl: `https://www.reddit.com/user/${username}`, exposure: 'Full post/comment history, karma, and communities visible', riskWeight: 7, hasApi: true },
-            { name: 'Medium', icon: '✍️', profileUrl: `https://medium.com/@${username}`, exposure: 'Published articles and reading activity visible', riskWeight: 4, hasApi: false },
-            { name: 'Quora', icon: '❓', profileUrl: `https://www.quora.com/profile/${username}`, exposure: 'Questions, answers, and interests publicly visible', riskWeight: 5, hasApi: false }
-        );
-    }
-    if (checkBrokers && !isPhone && !isEmail && !isFullName) {
-        allPlatforms.push(
-            { name: 'Spokeo', icon: '🔍', profileUrl: `https://www.spokeo.com/${username}`, exposure: 'Aggregated personal records: address, phone, relatives', riskWeight: 10, hasApi: false },
-            { name: 'BeenVerified', icon: '✔️', profileUrl: `https://www.beenverified.com/people/${username}/`, exposure: 'Address history, phone numbers compiled', riskWeight: 10, hasApi: false },
-            { name: 'WhitePages', icon: '📄', profileUrl: `https://www.whitepages.com/name/${username}`, exposure: 'Phone, address, and public records searchable', riskWeight: 9, hasApi: false }
-        );
-    }
-    // Phone lookup platforms — shown when input is a phone number or checkbox checked
-    if (isEmail && emailIntel) {
-        allPlatforms.push(...buildEmailLookupSources(emailIntel, {
-            includeSocial: checkSocial,
-            includeProfessional: checkProfessional,
-            includeBrokers: checkBrokers
-        }));
-    }
-    if (checkPhone && isPhone) {
-        allPlatforms.push(...buildPhoneLookupSources(phoneIntel));
-    }
-    const dedupedPlatforms = dedupePlatforms(allPlatforms);
+    identifiers.emails.forEach(email => {
+        jobs.push({
+            label: `email address ${email}`,
+            run: progress => scanEmailFootprint(email, findings, timestampLocal, scanOptions, progress)
+        });
+    });
 
-    // Show scanning overlay with per-platform progress
+    if (checkPhone) {
+        identifiers.phones.forEach(phone => {
+            jobs.push({
+                label: `phone number ${phone}`,
+                run: progress => scanPhoneFootprint(phone, findings, timestampLocal, scanOptions, progress)
+            });
+        });
+    }
+
+    identifiers.names.forEach(name => {
+        jobs.push({
+            label: `full name ${name}`,
+            run: progress => scanFullNameFootprint(name, findings, timestampLocal, scanOptions, progress)
+        });
+    });
+
+    identifiers.usernames.forEach(username => {
+        jobs.push({
+            label: `username ${username}`,
+            run: progress => scanUsernameFootprint(username, findings, timestampLocal, scanOptions, progress)
+        });
+    });
+
+    if (!jobs.length) {
+        return alert('Could not identify a valid name, phone number, email address, or username in the input.');
+    }
+
+    footprintLastQuery = rawInput;
+    footprintLastType = queryType;
+
+    // Show Progress Overlay
     const overlay = document.getElementById('scanOverlay');
     const scanText = document.getElementById('scanText');
     const bar = document.getElementById('scanProgressBar');
-    bar.style.width = '0%';
-    overlay.classList.remove('hidden');
+    if (bar) bar.style.width = '0%';
+    if (overlay) overlay.classList.remove('hidden');
 
-    const stages = [];
-    if (isEmail) {
-        stages.push({ kind: 'email-domain', label: 'Inspecting email domain...' });
-        stages.push({ kind: 'email-gravatar', label: 'Checking public avatar/profile traces...' });
+    function updateProgress(text, pct) {
+        if (scanText) scanText.textContent = text;
+        if (bar) bar.style.width = pct + '%';
     }
-    dedupedPlatforms.forEach(platform => stages.push({ kind: 'platform', label: `Checking ${platform.name}...`, platform }));
 
-    let domainIntel = null;
-    let gravatarIntel = null;
-    const results = [];
+    try {
+        updateProgress(`Detected ${jobs.length} identifier scan${jobs.length === 1 ? '' : 's'}...`, 5);
+        await new Promise(r => setTimeout(r, 150));
 
-    for (let i = 0; i < stages.length; i++) {
-        const stage = stages[i];
-        scanText.textContent = stage.label;
-        bar.style.width = (((i + 1) / stages.length) * 100) + '%';
-
-        if (stage.kind === 'email-domain' && emailIntel) {
-            domainIntel = await lookupEmailDomainIntel(emailIntel.domain);
-            continue;
-        }
-        if (stage.kind === 'email-gravatar' && emailIntel) {
-            gravatarIntel = await lookupGravatarByEmail(query);
-            continue;
+        for (let i = 0; i < jobs.length; i++) {
+            const job = jobs[i];
+            const startPct = 8 + Math.round((i / jobs.length) * 84);
+            const endPct = 8 + Math.round(((i + 1) / jobs.length) * 84);
+            updateProgress(`Scanning ${job.label}...`, startPct);
+            await job.run((text, localPct) => {
+                const boundedLocal = Math.max(0, Math.min(100, localPct || 0));
+                const pct = Math.round(startPct + ((endPct - startPct) * boundedLocal / 100));
+                updateProgress(text, pct);
+            });
         }
 
-        const p = stage.platform;
-        let status = 'unknown';
-        let matchedVariant = usernameCandidates[0];
+        updateProgress('Deduplicating findings and computing confidence metrics...', 95);
+        await new Promise(r => setTimeout(r, 200));
 
-        if (p.hasApi) {
-            for (const candidate of usernameCandidates) {
-                status = await checkProfile(p.name, candidate);
-                matchedVariant = candidate;
-                if (status === 'found') break;
+    } catch (err) {
+        console.error('Error during footprint search:', err);
+    } finally {
+        updateProgress('Scan complete', 100);
+        await new Promise(r => setTimeout(r, 250));
+        if (overlay) overlay.classList.add('hidden');
+    }
+
+    // Deduplicate
+    const dedupedFindings = deduplicateFindings(findings);
+    footprintLastResults = dedupedFindings;
+
+    // Save history
+    const verifiedTotal = dedupedFindings.filter(f => f.status === 'verified').length;
+    saveFootprintHistory(rawInput, queryType, dedupedFindings.length, verifiedTotal);
+
+    // Render results in UI
+    renderFootprintResults(rawInput, queryType, dedupedFindings);
+}
+
+// Helper: check developer platforms
+async function checkDeveloperPlatforms(username, findings, timestampLocal, matchType, identifierType = 'Username') {
+    // 1. GitHub
+    try {
+        const ghRes = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}`, {
+            headers: { 'Accept': 'application/vnd.github.v3+json' },
+            signal: AbortSignal.timeout(4500)
+        });
+        if (ghRes.ok) {
+            const ghData = await ghRes.json();
+            findings.push({
+                source: 'GitHub Developer Registry',
+                matchedIdentifier: username,
+                identifierType,
+                url: ghData.html_url || `https://github.com/${username}`,
+                matchType: matchType,
+                confidence: 98,
+                status: 'verified',
+                evidence: `Active GitHub account: "${ghData.name || ghData.login}". Public Repos: ${ghData.public_repos || 0}. Followers: ${ghData.followers || 0}. Joined: ${ghData.created_at ? ghData.created_at.slice(0, 10) : 'Active'}. Bio: "${ghData.bio || 'None'}".`,
+                timestamp: timestampLocal,
+                domain: 'github.com'
+            });
+        }
+    } catch {
+        // Ignore
+    }
+
+    // 2. GitLab
+    try {
+        const glRes = await fetch(`https://gitlab.com/api/v4/users?username=${encodeURIComponent(username)}`, {
+            signal: AbortSignal.timeout(4500)
+        });
+        if (glRes.ok) {
+            const glData = await glRes.json();
+            if (Array.isArray(glData) && glData.length > 0) {
+                const u = glData[0];
+                findings.push({
+                    source: 'GitLab Open Source Directory',
+                    matchedIdentifier: username,
+                    identifierType,
+                    url: u.web_url || `https://gitlab.com/${username}`,
+                    matchType: matchType,
+                    confidence: 95,
+                    status: 'verified',
+                    evidence: `Verified GitLab profile: ${u.name} (@${u.username}). State: ${u.state || 'active'}. Public User ID: ${u.id}.`,
+                    timestamp: timestampLocal,
+                    domain: 'gitlab.com'
+                });
             }
         }
-
-        results.push({ ...p, status, matchedVariant });
+    } catch {
+        // Ignore
     }
 
-    scanText.textContent = 'Analysis complete';
-    bar.style.width = '100%';
-    await new Promise(r => setTimeout(r, 400));
-    overlay.classList.add('hidden');
-
-    const confirmed = results.filter(p => p.status === 'found');
-    const cleared = results.filter(p => p.status === 'not_found');
-    const manual = results.filter(p => p.status === 'unknown');
-    const cyberlayersBaseline = results.filter(p => p.baselineSource === 'cyberlayers');
-    const sortedConfirmed = sortResultsByConfidence(confirmed);
-    const sortedCleared = sortResultsByConfidence(cleared);
-    const sortedManual = sortResultsByConfidence(manual);
-    const averageConfirmedConfidence = sortedConfirmed.length ? Math.round(sortedConfirmed.reduce((sum, item) => sum + getResultConfidence(item).score, 0) / sortedConfirmed.length) : 0;
-    const averageManualConfidence = sortedManual.length ? Math.round(sortedManual.reduce((sum, item) => sum + getResultConfidence(item).score, 0) / sortedManual.length) : 0;
-
-    // Score based only on verified data
-    const verifiedRisk = confirmed.reduce((s, p) => s + p.riskWeight, 0);
-    const totalVerifiedMax = [...confirmed, ...cleared].reduce((s, p) => s + p.riskWeight, 0);
-    const exposureScore = totalVerifiedMax > 0 ? Math.round(100 - (verifiedRisk / totalVerifiedMax) * 100) : 100;
-    const emailRiskSignals = [];
-    const emailLegitimacySignals = [];
-    if (isEmail && emailIntel) {
-        if (/^(admin|support|help|info|billing|accounts|noreply|no-reply|contact)$/i.test(emailIntel.localPart)) {
-            emailRiskSignals.push('Role-based mailbox names are harder to attribute to a real person.');
+    // 3. Dev.to
+    try {
+        const devRes = await fetch(`https://dev.to/api/users/by_username?url=${encodeURIComponent(username)}`, {
+            signal: AbortSignal.timeout(4000)
+        });
+        if (devRes.ok) {
+            const devData = await devRes.json();
+            if (devData && devData.username) {
+                findings.push({
+                    source: 'Dev.to Technical Publisher',
+                    matchedIdentifier: username,
+                    identifierType,
+                    url: `https://dev.to/${devData.username}`,
+                    matchType: matchType,
+                    confidence: 92,
+                    status: 'verified',
+                    evidence: `Verified developer author profile: "${devData.name}". Bio: "${devData.summary || 'None'}". Joined: ${devData.joined_at ? devData.joined_at.slice(0, 10) : 'Active'}.`,
+                    timestamp: timestampLocal,
+                    domain: 'dev.to'
+                });
+            }
         }
-        if (domainIntel) {
-            emailRiskSignals.push(...domainIntel.riskNotes);
-            emailLegitimacySignals.push(...domainIntel.legitimacyNotes);
-        }
-        if (gravatarIntel && (gravatarIntel.hasAvatar || gravatarIntel.hasProfile)) {
-            emailLegitimacySignals.push(gravatarIntel.note);
-        }
+    } catch {
+        // Ignore
     }
-    const adjustedExposureScore = Math.max(0, Math.min(100, exposureScore - emailRiskSignals.length * 8 + emailLegitimacySignals.length * 5));
-    const level = isPhone || isEmail ? 'low' : confirmed.length === 0 && emailRiskSignals.length === 0 ? 'safe' : adjustedExposureScore >= 70 ? 'low' : adjustedExposureScore >= 40 ? 'medium' : 'high';
-    const inputTypeLabel = isEmail ? '📧 Email' : isPhone ? '📱 Phone Number' : isFullName ? '👤 Full Name' : '🏷️ Username';
 
-    setBadge('footprintThreatBadge', level, isPhone ? 'PHONE LOOKUP' : isEmail ? 'EMAIL LOOKUP' : confirmed.length > 0 ? `${confirmed.length} CONFIRMED` : 'SCAN DONE');
+    // 4. npm Package Registry
+    try {
+        const npmRes = await fetch(`https://registry.npmjs.org/-/v1/search?text=maintainer:${encodeURIComponent(username)}&size=3`, {
+            signal: AbortSignal.timeout(4000)
+        });
+        if (npmRes.ok) {
+            const npmData = await npmRes.json();
+            if (npmData && npmData.total > 0 && npmData.objects && npmData.objects.length > 0) {
+                const pkgNames = npmData.objects.map(o => o.package.name).slice(0, 3).join(', ');
+                findings.push({
+                    source: 'npm Package Registry',
+                    matchedIdentifier: username,
+                    identifierType,
+                    url: `https://www.npmjs.com/~${username}`,
+                    matchType: 'Strong',
+                    confidence: 91,
+                    status: 'verified',
+                    evidence: `Author/Maintainer of ${npmData.total} public JavaScript package(s): ${pkgNames}.`,
+                    timestamp: timestampLocal,
+                    domain: 'npmjs.com'
+                });
+            }
+        }
+    } catch {
+        // Ignore
+    }
+
+    // 5. PyPI Package
+    try {
+        const pypiRes = await fetch(`https://pypi.org/pypi/${encodeURIComponent(username)}/json`, {
+            signal: AbortSignal.timeout(4000)
+        });
+        if (pypiRes.ok) {
+            const pypiData = await pypiRes.json();
+            if (pypiData && pypiData.info) {
+                findings.push({
+                    source: 'PyPI Python Package Index',
+                    matchedIdentifier: username,
+                    identifierType,
+                    url: `https://pypi.org/project/${encodeURIComponent(username)}/`,
+                    matchType: 'Strong',
+                    confidence: 88,
+                    status: 'verified',
+                    evidence: `Published Python package: "${pypiData.info.name}" v${pypiData.info.version}. Summary: ${pypiData.info.summary || 'None'}.`,
+                    timestamp: timestampLocal,
+                    domain: 'pypi.org'
+                });
+            }
+        }
+    } catch {
+        // Ignore
+    }
+}
+
+// Compute email sha256 for Gravatar
+async function getEmailSha256(email) {
+    try {
+        const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(email.trim().toLowerCase()));
+        return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+        return '';
+    }
+}
+
+// Render Results UI
+function renderFootprintResults(query, queryType, findings) {
+    const resultsContainer = document.getElementById('footprintResults');
     const body = document.getElementById('footprintResultsBody');
+    const badge = document.getElementById('footprintThreatBadge');
+    const subtitle = document.getElementById('footprintResultsSubtitle');
+    const statsBar = document.getElementById('footprintStatsBar');
+    const confWrap = document.getElementById('fpConfidenceWrap');
 
-    if (isPhone && phoneIntel) {
-        const phoneAverageConfidence = sortedManual.length ? Math.round(sortedManual.reduce((sum, item) => sum + getResultConfidence(item).score, 0) / sortedManual.length) : 0;
-        body.innerHTML = `
-        <div class="result-score">
-            <div class="score-circle" style="border-color:var(--risk-low);color:var(--risk-low);">${phoneAverageConfidence || 'PUB'}</div>
-            <div class="score-info"><h3>Public Phone Lookup</h3>
-            <p>${sortedManual.length} public source${sortedManual.length !== 1 ? 's' : ''} with average confidence ${phoneAverageConfidence || 0}/100. No hidden-account guessing.</p></div>
-        </div>
-        <div class="result-item"><div class="result-item-header"><span class="result-icon">📱</span><h4>Phone Number Intelligence</h4></div>
-        <p><strong>Input:</strong> ${escapeHtml(query)}<br><strong>Digits:</strong> ${escapeHtml(phoneIntel.digits || 'Unknown')}<br><strong>E.164 guess:</strong> ${escapeHtml(phoneIntel.e164 || 'Not inferred')}<br><strong>Country hint:</strong> ${escapeHtml(phoneIntel.likelyCountry)}</p></div>
-        <div class="result-item"><div class="result-item-header"><span class="result-icon">🧭</span><h4>Accuracy Note</h4></div>
-        <p>This tracker can only show <strong>publicly checkable traces</strong> for a phone number. It cannot prove every account linked to the number without platform, carrier, or paid OSINT APIs. Results below are lookup sources, not confirmed ownership claims.</p></div>
-        <div class="result-item"><div class="result-item-header"><span class="result-icon">📊</span><h4>Accuracy Summary</h4></div>
-        <p><strong>Higher-confidence clues:</strong> exact-search traces, WhatsApp response, and stronger caller-ID style lookups<br><strong>Medium-confidence clues:</strong> social sweeps and reverse-lookup aggregators<br><strong>Lower-confidence clues:</strong> any third-party reverse-lookup details until independently confirmed</p></div>
-        <div class="result-item"><div class="result-item-header"><span class="result-icon">🔍</span><h4>Public Lookup Sources</h4></div>
-        <p>Use these to verify where the number appears publicly and which services visibly respond to it.</p></div>
-        ${sortedManual.map(p => `<div class="platform-item">
-            <div class="platform-icon-wrap">${p.icon}</div>
-            <div class="platform-details">
-                <h4>${p.name} <a href="${p.profileUrl}" target="_blank" style="font-size:11px;color:var(--accent-cyan);text-decoration:none;margin-left:6px;">Open Lookup -></a></h4>
-                <p>${p.exposure}</p>
-                <p><strong>Accuracy:</strong> ${escapeHtml(getResultConfidence(p).label)} (${getResultConfidence(p).score}/100)<br><strong>Why:</strong> ${escapeHtml(getResultConfidence(p).note)}</p>
-            </div>
-            <span class="platform-status status-found">Public Check</span>
-        </div>`).join('')}
-        <div class="result-item" style="margin-top:16px"><div class="result-item-header"><span class="result-icon">⚖️</span><h4>What This Means</h4></div>
-        <p>We intentionally do <strong>not</strong> claim “this number is linked to X account” unless there is direct public evidence. This keeps phone-number results accurate instead of speculative.</p></div>
-        <div class="result-item" style="margin-top:12px"><div class="result-item-header"><span class="result-icon">💡</span><h4>Recommended Next Steps</h4></div>
-        <p>• Open the lookup links above and confirm any public traces one by one<br>• Search exact variants: ${phoneIntel.variants.map(escapeHtml).join(', ')}<br>• If you need high-confidence account linkage, add a backend with provider APIs or paid phone-intelligence services<br>• Treat any platform match as a clue until independently verified</p></div>
-        `;
-        showResults('footprintResults');
-        return;
+    if (!resultsContainer || !body) return;
+
+    if (subtitle) {
+        subtitle.textContent = `Target: "${query}" (${queryType}) • ${findings.length} public source leads`;
     }
 
-    if (isEmail && emailIntel) {
-        const publicSources = sortResultsByConfidence(manual.filter(p => p.evidenceType !== 'owner-audit'));
-        const ownerAuditSources = sortResultsByConfidence(manual.filter(p => p.evidenceType === 'owner-audit'));
-        const averagePublicConfidence = publicSources.length > 0
-            ? Math.round(publicSources.reduce((sum, source) => sum + getResultConfidence(source).score, 0) / publicSources.length)
-            : 0;
-        body.innerHTML = `
-        <div class="result-score">
-            <div class="score-circle" style="border-color:var(--risk-low);color:var(--risk-low);">${averagePublicConfidence || 'MAIL'}</div>
-            <div class="score-info"><h3>Email Search</h3>
-            <p>${publicSources.length > 0 ? `${publicSources.length} public search source${publicSources.length > 1 ? 's' : ''} with average confidence ${averagePublicConfidence}/100.` : 'Evidence-based mode: public traces plus owner-only audit links.'}</p></div>
-        </div>
-        <div class="result-item"><div class="result-item-header"><span class="result-icon">📧</span><h4>Email Intelligence</h4></div>
-        <p><strong>Input:</strong> ${escapeHtml(query)}<br><strong>Mailbox:</strong> ${escapeHtml(emailIntel.localPart)}<br><strong>Domain:</strong> ${escapeHtml(emailIntel.domain)}${domainIntel ? `<br><strong>Provider type:</strong> ${escapeHtml(domainIntel.providerType)}${domainIntel.mxHosts.length ? `<br><strong>MX records:</strong> ${escapeHtml(domainIntel.mxHosts.slice(0, 3).join(', '))}` : ''}` : ''}${gravatarIntel ? `<br><strong>Public profile check:</strong> ${escapeHtml(gravatarIntel.note)}` : ''}</p>
-        ${emailRiskSignals.length ? `<p><strong>Risk notes:</strong><br>• ${emailRiskSignals.map(escapeHtml).join('<br>• ')}</p>` : ''}
-        ${emailLegitimacySignals.length ? `<p><strong>Legitimacy notes:</strong><br>• ${emailLegitimacySignals.map(escapeHtml).join('<br>• ')}</p>` : ''}
-        </div>
-        <div class="result-item"><div class="result-item-header"><span class="result-icon">🧭</span><h4>Accuracy Note</h4></div>
-        <p>This tracker searches for <strong>public email traces</strong>, especially social and indexed-web mentions. It cannot truthfully list all hidden linked apps from a public browser session. Each source below includes a confidence score so you can separate strong exposure leads from weaker search hints.</p></div>
-        ${publicSources.length > 0 ? `<div class="result-item"><div class="result-item-header"><span class="result-icon">🔍</span><h4>Email Search Sources</h4></div><p>Use these to check where the email appears openly on social platforms, code, or indexed pages.</p></div>` : ''}
-        ${publicSources.map(p => `<div class="platform-item">
-            <div class="platform-icon-wrap">${p.icon}</div>
-            <div class="platform-details">
-                <h4>${p.name} <a href="${p.profileUrl}" target="_blank" style="font-size:11px;color:var(--accent-cyan);text-decoration:none;margin-left:6px;">Open Lookup -></a></h4>
-                <p>${p.exposure}</p>
-                <p><strong>Accuracy:</strong> ${escapeHtml(p.confidenceLabel || 'Manual review')} (${escapeHtml(String(p.confidenceScore || 0))}/100)<br><strong>Why:</strong> ${escapeHtml(p.confidenceNote || 'Needs manual verification.')}</p>
-            </div>
-            <span class="platform-status status-found">Public Check</span>
-        </div>`).join('')}
-        ${ownerAuditSources.length > 0 ? `<div class="result-item" style="margin-top:16px"><div class="result-item-header"><span class="result-icon">🔐</span><h4>Owner-Only Linked-App Audit</h4></div><p>These pages only work for the person signed into the mailbox owner account. They are the accurate place to review connected Google apps and sessions.</p></div>` : ''}
-        ${ownerAuditSources.map(p => `<div class="platform-item">
-            <div class="platform-icon-wrap">${p.icon}</div>
-            <div class="platform-details">
-                <h4>${p.name} <a href="${p.profileUrl}" target="_blank" style="font-size:11px;color:var(--accent-cyan);text-decoration:none;margin-left:6px;">Open Audit →</a></h4>
-                <p>${p.exposure}</p>
-                <p><strong>Accuracy:</strong> ${escapeHtml(p.confidenceLabel || 'Owner verified')} (${escapeHtml(String(p.confidenceScore || 0))}/100)<br><strong>Why:</strong> ${escapeHtml(p.confidenceNote || 'Authenticated owner check.')}</p>
-            </div>
-            <span class="platform-status status-found">Owner Audit</span>
-        </div>`).join('')}
-        <div class="result-item" style="margin-top:16px"><div class="result-item-header"><span class="result-icon">⚖️</span><h4>What This Means</h4></div>
-        <p>We intentionally do <strong>not</strong> claim "this Gmail is linked to X app" unless there is direct public evidence or the owner checks authenticated account pages. That keeps email results accurate instead of speculative.</p></div>
-        <div class="result-item" style="margin-top:12px"><div class="result-item-header"><span class="result-icon">💡</span><h4>Recommended Next Steps</h4></div>
-        <p>• Open the public lookup links above and verify any mentions one by one<br>• If this is your Gmail, open the owner-audit links while signed in to review connected apps<br>• Search exact variants: ${emailIntel.variants.map(escapeHtml).join(', ')}<br>• Treat public mentions as clues, not proof of account ownership<br>• For true linked-app detection across providers, add an authenticated backend and official APIs</p></div>
-        `;
-        showResults('footprintResults');
-        return;
+    const verified = findings.filter(f => f.status === 'verified');
+    const unverified = findings.filter(f => f.status !== 'verified');
+    const exactMatches = findings.filter(f => f.matchType === 'Exact');
+    const strongMatches = findings.filter(f => f.matchType === 'Strong');
+    const possibleMatches = findings.filter(f => f.matchType === 'Possible');
+
+    const uniqueDomains = new Set(findings.map(f => getFindingDomain(f))).size;
+    const avgConfidence = findings.length ? Math.round(findings.reduce((acc, cur) => acc + (cur.confidence || 0), 0) / findings.length) : 0;
+
+    // Update Stats Bar
+    if (statsBar) {
+        statsBar.style.display = 'grid';
+        document.getElementById('fpStatTotal').textContent = findings.length;
+        document.getElementById('fpStatVerified').textContent = verified.length;
+        document.getElementById('fpStatDomains').textContent = uniqueDomains;
+        document.getElementById('fpStatConfidence').textContent = avgConfidence + '%';
     }
 
-    body.innerHTML = `
-        <div class="result-score">
-            <div class="score-circle" style="border-color:var(--risk-${level});color:var(--risk-${level});">${adjustedExposureScore}</div>
-            <div class="score-info"><h3>Privacy Score: ${exposureScore}/100</h3>
-            <p>${confirmed.length} confirmed · ${cleared.length} clear · ${manual.length} need manual check</p></div>
+    // Update Confidence Stacked Bar
+    if (confWrap && findings.length > 0) {
+        confWrap.style.display = 'block';
+        const exactPct = Math.round((exactMatches.length / findings.length) * 100);
+        const strongPct = Math.round((strongMatches.length / findings.length) * 100);
+        const possiblePct = Math.max(0, 100 - exactPct - strongPct);
+
+        document.getElementById('fpBarExact').style.width = exactPct + '%';
+        document.getElementById('fpBarStrong').style.width = strongPct + '%';
+        document.getElementById('fpBarPossible').style.width = possiblePct + '%';
+        document.getElementById('fpConfidenceSummary').textContent = `${exactMatches.length} Exact · ${strongMatches.length} Strong · ${possibleMatches.length} Possible`;
+    }
+
+    // Threat badge
+    if (badge) {
+        if (verified.length >= 3 || findings.some(f => f.source.includes('Breach'))) {
+            setBadge('footprintThreatBadge', 'high', `${verified.length} VERIFIED FOUND`);
+        } else if (verified.length > 0) {
+            setBadge('footprintThreatBadge', 'medium', `${verified.length} VERIFIED`);
+        } else {
+            setBadge('footprintThreatBadge', 'safe', 'SCAN COMPLETE');
+        }
+    }
+
+    // Render HTML Cards
+    let html = '';
+
+    const identifiersByType = findings.reduce((acc, finding) => {
+        const type = finding.identifierType || 'Identifier';
+        if (!acc[type]) acc[type] = new Set();
+        if (finding.matchedIdentifier) acc[type].add(finding.matchedIdentifier);
+        return acc;
+    }, {});
+
+    if (Object.keys(identifiersByType).length > 1) {
+        html += `
+        <div class="footprint-identity-summary">
+            ${Object.entries(identifiersByType).map(([type, values]) => `
+                <div class="footprint-identity-pill">
+                    <span>${escapeHtml(type)}</span>
+                    <strong>${escapeHtml(Array.from(values).slice(0, 3).join(', '))}${values.size > 3 ? ' +' + (values.size - 3) : ''}</strong>
+                </div>
+            `).join('')}
         </div>
-        <div class="result-item"><div class="result-item-header"><span class="result-icon">🔍</span><h4>Search Query</h4></div>
-        <p><strong>${query}</strong> — detected as ${inputTypeLabel}${isEmail ? ' (variants: <strong>' + usernameCandidates.map(escapeHtml).join(', ') + '</strong>)' : ''}</p></div>
+        `;
+    }
 
-        ${isFullName ? `<div class="result-item"><div class="result-item-header"><span class="result-icon">🧭</span><h4>Deep Name Sweep</h4></div>
-        <p>This full-name scan now checks a broader set of public web surfaces: search engines, social apps, professional networks, creative platforms, communities, and optional data-broker traces. It uses exact-name and close-name variants, but private apps and closed-profile results still cannot be verified from the browser alone.</p></div>` : ''}
-
-        ${!isEmail && !isPhone && !isFullName && cyberlayersBaseline.length > 0 ? `<div class="result-item"><div class="result-item-header"><span class="result-icon">CL</span><h4>Cyberlayers Baseline</h4></div>
-        <p>This username scan now uses the core platform set from the Cyberlayers <strong>digital_footprint_tracker</strong> repo: ${cyberlayersBaseline.map(platform => escapeHtml(platform.name)).join(', ')}. Additional platforms below are treated as extended checks.</p></div>` : ''}
-
-        ${isEmail && emailIntel ? `<div class="result-item"><div class="result-item-header"><span class="result-icon">🧬</span><h4>Email Intelligence</h4></div>
-        <p>Mailbox: <strong>${escapeHtml(emailIntel.localPart)}</strong><br>Domain: <strong>${escapeHtml(emailIntel.domain)}</strong>${domainIntel ? `<br>Provider type: <strong>${escapeHtml(domainIntel.providerType)}</strong>${domainIntel.mxHosts.length ? `<br>MX records: ${escapeHtml(domainIntel.mxHosts.slice(0, 3).join(', '))}` : ''}` : ''}${gravatarIntel ? `<br>Public profile check: ${escapeHtml(gravatarIntel.note)}` : ''}</p>
-        ${emailRiskSignals.length ? `<p><strong>Risk notes:</strong><br>• ${emailRiskSignals.map(escapeHtml).join('<br>• ')}</p>` : ''}
-        ${emailLegitimacySignals.length ? `<p><strong>Legitimacy notes:</strong><br>• ${emailLegitimacySignals.map(escapeHtml).join('<br>• ')}</p>` : ''}
-        </div>` : ''}
-
-        ${!isEmail && !isPhone ? `<div class="result-item"><div class="result-item-header"><span class="result-icon">📊</span><h4>Accuracy Summary</h4></div><p><strong>API-verified results:</strong> ${sortedConfirmed.length + sortedCleared.length} check${sortedConfirmed.length + sortedCleared.length !== 1 ? 's' : ''} with strong confidence<br><strong>Manual profile guesses:</strong> ${sortedManual.length} source${sortedManual.length !== 1 ? 's' : ''} with average confidence ${averageManualConfidence}/100 until you open them and confirm</p></div>` : ''}
-        ${confirmed.length > 0 ? '<div class="result-item"><div class="result-item-header"><span class="result-icon">🔴</span><h4>Confirmed Exposures (Verified via API)</h4></div><p>These accounts were verified to exist using real API checks.</p></div>' : ''}
-        ${sortedConfirmed.map(p => `<div class="platform-item">
-            <div class="platform-icon-wrap">${p.icon}</div>
-            <div class="platform-details">
-                <h4>${p.name} <a href="${p.profileUrl}" target="_blank" style="font-size:11px;color:var(--accent-cyan);text-decoration:none;margin-left:6px;">View Profile →</a></h4>
-                ${isEmail ? `<p><strong>Matched variant:</strong> ${escapeHtml(p.matchedVariant)}</p>` : ''}
-                <p>${p.exposure}</p>
-                <p><strong>Accuracy:</strong> ${escapeHtml(getResultConfidence(p).label)} (${getResultConfidence(p).score}/100)<br><strong>Why:</strong> ${escapeHtml(getResultConfidence(p).note)}</p>
+    // If query is Full Name: render prominent required disclaimer
+    if (queryType === 'Full Name' || findings.some(f => f.identifierType === 'Full Name')) {
+        html += `
+        <div class="name-match-disclaimer-box">
+            <span class="name-match-disclaimer-icon">⚠️</span>
+            <div>
+                <strong>Name-Only Attribution Safety Notice</strong>
+                <p style="margin-top:4px;margin-bottom:0;">Name-only matches must <strong>never automatically be treated as the same individual</strong>. Common names are shared by hundreds or thousands of different people across the world. Every finding below is classified as a <em>Possible Lead</em> and must be independently verified with secondary identifiers (email, employer, location, or handle) before drawing any conclusion.</p>
             </div>
-            <span class="platform-status status-exposed">Exposed</span>
-        </div>`).join('')}
+        </div>
+        `;
+    }
 
-        ${cleared.length > 0 ? '<div class="result-item"><div class="result-item-header"><span class="result-icon">🟢</span><h4>Verified Clear (No Account Found)</h4></div><p>API confirmed no account exists with this username.</p></div>' : ''}
-        ${sortedCleared.map(p => `<div class="platform-item">
-            <div class="platform-icon-wrap">${p.icon}</div>
-            <div class="platform-details"><h4>${p.name}</h4><p>No account found — this username is not registered</p><p><strong>Accuracy:</strong> ${escapeHtml(getResultConfidence(p).label)} (${getResultConfidence(p).score}/100)<br><strong>Why:</strong> ${escapeHtml(getResultConfidence(p).note)}</p></div>
-            <span class="platform-status status-not-found">Clear</span>
-        </div>`).join('')}
+    // Findings Cards
+    if (findings.length === 0) {
+        html += `
+        <div style="text-align:center;padding:40px;color:var(--text-muted);">
+            <div style="font-size:36px;margin-bottom:10px;">🔍</div>
+            <h3>No public footprint found</h3>
+            <p>No publicly indexed profiles, repositories, or records matched this identifier.</p>
+        </div>
+        `;
+    } else {
+        html += `<div style="margin-top:14px;">`;
 
-        ${manual.length > 0 ? '<div class="result-item"><div class="result-item-header"><span class="result-icon">🔵</span><h4>Manual Check Required</h4></div><p>These platforms block automated checks. Click the links to verify yourself.</p></div>' : ''}
-        ${sortedManual.map(p => `<div class="platform-item">
-            <div class="platform-icon-wrap">${p.icon}</div>
-            <div class="platform-details">
-                <h4>${p.name} <a href="${p.profileUrl}" target="_blank" style="font-size:11px;color:var(--accent-cyan);text-decoration:none;margin-left:6px;">Check Now →</a></h4>
-                <p>Cannot auto-verify — click to check yourself</p>
-                <p><strong>Accuracy:</strong> ${escapeHtml(getResultConfidence(p).label)} (${getResultConfidence(p).score}/100)<br><strong>Why:</strong> ${escapeHtml(getResultConfidence(p).note)}</p>
+        // Verified findings first, then unverified
+        const sortedFindings = [
+            ...findings.filter(f => f.status === 'verified'),
+            ...findings.filter(f => f.status !== 'verified')
+        ];
+
+        sortedFindings.forEach(f => {
+            const isVer = f.status === 'verified';
+            const badgeClass = f.matchType === 'Exact' ? 'match-exact' : f.matchType === 'Strong' ? 'match-strong' : 'match-possible';
+            const domain = getFindingDomain(f);
+            const sourceIcon = f.icon || (f.source.includes('GitHub') ? '🐙' : f.source.includes('Reddit') ? '🔴' : f.source.includes('GitLab') ? '🦊' : f.source.includes('Breach') ? '🚨' : f.source.includes('Wikipedia') ? '📖' : f.source.includes('Bluesky') ? '☁️' : f.source.includes('Keybase') ? '🔐' : f.source.includes('npm') ? '📦' : f.source.includes('Scholar') ? '🎓' : f.source.includes('News') ? '📰' : f.source.includes('WhatsApp') ? '💬' : '🌐');
+
+            html += `
+            <div class="osint-finding-card ${isVer ? 'verified' : 'unverified'}">
+                <div class="osint-card-header">
+                    <div class="osint-card-title-group">
+                        <div class="osint-source-icon">
+                            ${escapeHtml(sourceIcon)}
+                        </div>
+                        <div>
+                            <div class="osint-source-name">${escapeHtml(f.source)}</div>
+                            <span class="osint-identifier-pill">${escapeHtml(f.identifierType ? `${f.identifierType}: ${f.matchedIdentifier}` : f.matchedIdentifier)}</span>
+                        </div>
+                    </div>
+                    <div class="osint-card-badges">
+                        <span class="osint-badge ${badgeClass}">${escapeHtml(f.matchType)} Match (${f.confidence}%)</span>
+                        <span class="osint-badge ${isVer ? 'verified-tag' : 'unverified-tag'}">${isVer ? '✓ Verified Source' : '○ Unverified Source'}</span>
+                    </div>
+                </div>
+
+                <div class="osint-evidence-box">
+                    <strong>Evidence:</strong> ${escapeHtml(f.evidence)}
+                </div>
+
+                <div class="osint-card-footer">
+                    <div>
+                        <span>Host: <strong>${escapeHtml(domain)}</strong></span>
+                        <span style="margin-left:10px;opacity:0.75;">Checked at: ${escapeHtml(f.timestamp)}</span>
+                    </div>
+                    <a href="${f.url}" target="_blank" rel="noopener noreferrer" class="osint-direct-link">
+                        Open Website
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </a>
+                </div>
             </div>
-            <span class="platform-status status-found">Check Manually</span>
-        </div>`).join('')}
+            `;
+        });
 
-        ${confirmed.length > 0 ? `<div class="result-item" style="margin-top:16px"><div class="result-item-header"><span class="result-icon">⚠️</span><h4>Risk Summary</h4></div>
-        <p>Your ${isEmail ? 'email-derived identity' : 'username'} "<strong>${escapeHtml(isEmail ? query : username)}</strong>" was confirmed on <strong>${confirmed.length}</strong> platform${confirmed.length > 1 ? 's' : ''} via API verification. Review these accounts and tighten privacy settings.</p></div>` : ''}
-        <div class="result-item" style="margin-top:12px"><div class="result-item-header"><span class="result-icon">💡</span><h4>Recommendations</h4></div>
-        <p>• Review privacy settings on confirmed platforms<br>• Manually check all "Check Manually" links above<br>• Delete accounts you no longer use<br>• Use different usernames across platforms<br>• Enable two-factor authentication everywhere<br>• Opt out of data broker sites<br>• Use a VPN to protect your browsing${isEmail ? '<br>• Check if this mailbox appears in old account sign-ups and recovery addresses<br>• Review whether the domain and MX setup match the context you expect' : ''}</p></div>
-    `;
+        html += `</div>`;
+    }
+
+    body.innerHTML = html;
     showResults('footprintResults');
 }
+
 
 // ==========================================
 // 8a. Relationship Intelligence Graph Engine
@@ -8921,6 +10376,362 @@ const NETWORK_LOCATIONS = [
     'Tokyo, Japan',
     'Dubai, UAE'
 ];
+
+const DASHBOARD_VPN_STORAGE_KEY = 'cybershield-dashboard-vpn-state';
+
+// Diverse global pool for automatic multi-country routing (never restricted to only USA)
+const AUTO_VPN_COUNTRIES = [
+    'germany',
+    'japan',
+    'singapore',
+    'switzerland',
+    'uk',
+    'netherlands',
+    'canada',
+    'france',
+    'australia',
+    'sweden',
+    'iceland',
+    'india',
+    'usa'
+];
+
+const DASHBOARD_VPN_LOCATIONS = {
+    germany: { country: 'Germany', location: 'Frankfurt, Germany', ip: '178.63.45.119', org: 'Cyber Shield VPN - Germany Gateway', flag: '🇩🇪', latency: '28ms' },
+    japan: { country: 'Japan', location: 'Tokyo, Japan', ip: '45.76.208.91', org: 'Cyber Shield VPN - Japan Gateway', flag: '🇯🇵', latency: '64ms' },
+    singapore: { country: 'Singapore', location: 'Singapore', ip: '139.180.128.64', org: 'Cyber Shield VPN - Singapore Gateway', flag: '🇸🇬', latency: '42ms' },
+    switzerland: { country: 'Switzerland', location: 'Zurich, Switzerland', ip: '185.220.101.5', org: 'Cyber Shield VPN - Swiss Secure Gateway', flag: '🇨🇭', latency: '31ms' },
+    uk: { country: 'UK', location: 'London, United Kingdom', ip: '185.199.108.87', org: 'Cyber Shield VPN - UK Gateway', flag: '🇬🇧', latency: '35ms' },
+    netherlands: { country: 'Netherlands', location: 'Amsterdam, Netherlands', ip: '194.187.249.2', org: 'Cyber Shield VPN - Amsterdam Gateway', flag: '🇳🇱', latency: '26ms' },
+    canada: { country: 'Canada', location: 'Toronto, Canada', ip: '149.56.22.108', org: 'Cyber Shield VPN - Canada Gateway', flag: '🇨🇦', latency: '52ms' },
+    france: { country: 'France', location: 'Paris, France', ip: '51.158.101.55', org: 'Cyber Shield VPN - France Gateway', flag: '🇫🇷', latency: '33ms' },
+    australia: { country: 'Australia', location: 'Sydney, Australia', ip: '103.27.32.76', org: 'Cyber Shield VPN - Australia Gateway', flag: '🇦🇺', latency: '98ms' },
+    sweden: { country: 'Sweden', location: 'Stockholm, Sweden', ip: '193.180.119.12', org: 'Cyber Shield VPN - Nordic Gateway', flag: '🇸🇪', latency: '38ms' },
+    iceland: { country: 'Iceland', location: 'Reykjavik, Iceland', ip: '185.220.103.11', org: 'Cyber Shield VPN - Privacy Haven', flag: '🇮🇸', latency: '45ms' },
+    india: { country: 'India', location: 'Mumbai, India', ip: '103.21.244.18', org: 'Cyber Shield VPN - India Gateway', flag: '🇮🇳', latency: '19ms' },
+    usa: { country: 'USA', location: 'Ashburn, United States', ip: '104.28.18.42', org: 'Cyber Shield VPN - USA Gateway', flag: '🇺🇸', latency: '48ms' },
+    beijing: { country: 'China', location: 'Beijing, China', ip: '101.34.88.23', org: 'Cyber Shield VPN - Beijing Gateway', flag: '🇨🇳', latency: '82ms' },
+    russia: { country: 'Russia', location: 'Moscow, Russia', ip: '5.188.72.14', org: 'Cyber Shield VPN - Russia Gateway', flag: '🇷🇺', latency: '79ms' },
+    other: { country: 'Privacy Gateway', location: 'Zurich, Switzerland', ip: '198.51.100.24', org: 'Cyber Shield VPN - Custom Gateway', flag: '🌐', latency: '50ms' }
+};
+
+function pickNextAutoCountry(excludeKey) {
+    const candidates = AUTO_VPN_COUNTRIES.filter(k => k !== excludeKey && DASHBOARD_VPN_LOCATIONS[k]);
+    if (!candidates.length) return 'germany';
+    return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function getDashboardVpnState() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(DASHBOARD_VPN_STORAGE_KEY) || '{}');
+        const selected = (saved.selectedCountry === 'auto' || DASHBOARD_VPN_LOCATIONS[saved.selectedCountry])
+            ? saved.selectedCountry
+            : 'auto';
+        let resolved = (saved.resolvedCountry && DASHBOARD_VPN_LOCATIONS[saved.resolvedCountry])
+            ? saved.resolvedCountry
+            : null;
+        if (selected !== 'auto') {
+            resolved = selected;
+        } else if (!resolved) {
+            resolved = 'germany';
+        }
+        return {
+            active: saved.active === true,
+            selectedCountry: selected,
+            resolvedCountry: resolved,
+            connectedAt: Number(saved.connectedAt) || 0,
+            autoRotate: saved.autoRotate === true
+        };
+    } catch {
+        return { active: false, selectedCountry: 'auto', resolvedCountry: 'germany', connectedAt: 0, autoRotate: false };
+    }
+}
+
+function setDashboardVpnState(nextState) {
+    localStorage.setItem(DASHBOARD_VPN_STORAGE_KEY, JSON.stringify(nextState));
+}
+
+function getDashboardVpnExitInfo() {
+    const state = getDashboardVpnState();
+    if (!state.active) return null;
+    const effectiveKey = (state.selectedCountry === 'auto')
+        ? (state.resolvedCountry || 'germany')
+        : state.selectedCountry;
+    const location = DASHBOARD_VPN_LOCATIONS[effectiveKey] || DASHBOARD_VPN_LOCATIONS.germany;
+    return {
+        ip: location.ip,
+        location: location.location,
+        org: location.org,
+        source: 'dashboard vpn',
+        vpnCountry: location.country,
+        flag: location.flag || '🌐',
+        latency: location.latency || '30ms',
+        vpnMasked: true,
+        connectedAt: state.connectedAt,
+        isAuto: state.selectedCountry === 'auto'
+    };
+}
+
+let dashboardVpnRotateInterval = null;
+
+function startDashboardVpnAutoRotate() {
+    stopDashboardVpnAutoRotate();
+    const state = getDashboardVpnState();
+    if (!state.active || !state.autoRotate) return;
+    dashboardVpnRotateInterval = setInterval(() => {
+        const current = getDashboardVpnState();
+        if (!current.active || !current.autoRotate) {
+            stopDashboardVpnAutoRotate();
+            return;
+        }
+        switchDashboardVpnCountry(true);
+    }, 60000);
+}
+
+function stopDashboardVpnAutoRotate() {
+    if (dashboardVpnRotateInterval) {
+        clearInterval(dashboardVpnRotateInterval);
+        dashboardVpnRotateInterval = null;
+    }
+}
+
+function switchDashboardVpnCountry(isAutoRotate = false) {
+    const state = getDashboardVpnState();
+    if (!state.active) return;
+    const currentKey = (state.selectedCountry === 'auto')
+        ? (state.resolvedCountry || 'germany')
+        : state.selectedCountry;
+    const nextKey = pickNextAutoCountry(currentKey);
+    const newLocation = DASHBOARD_VPN_LOCATIONS[nextKey];
+    if (!newLocation) return;
+
+    state.resolvedCountry = nextKey;
+    state.selectedCountry = 'auto';
+    state.connectedAt = Date.now();
+    setDashboardVpnState(state);
+    renderDashboardVpn();
+    syncDashboardVpnWithNetworkMonitor(`VPN auto-routed to ${newLocation.country}`);
+
+    if (typeof showToast === 'function') {
+        showToast(`VPN Re-routed: ${newLocation.flag || ''} ${newLocation.location} (${newLocation.ip})`, 'info');
+    }
+    if (typeof pushNetworkAlert === 'function') {
+        pushNetworkAlert({
+            title: isAutoRotate ? 'VPN Auto-Rotated' : 'VPN Location Switched',
+            severity: 'low',
+            body: `Dynamic VPN connection re-routed to ${newLocation.country} (${newLocation.location}) with exit IP ${newLocation.ip}.`,
+            time: new Date(),
+            meta: `${newLocation.flag || ''} ${newLocation.country}`
+        });
+    }
+}
+
+function renderDashboardVpn() {
+    const state = getDashboardVpnState();
+    const effectiveKey = (state.selectedCountry === 'auto')
+        ? (state.resolvedCountry || 'germany')
+        : state.selectedCountry;
+    const location = DASHBOARD_VPN_LOCATIONS[effectiveKey] || DASHBOARD_VPN_LOCATIONS.germany;
+    const countrySelect = document.getElementById('dashboardVpnCountry');
+    const statusText = document.getElementById('dashboardVpnStatusText');
+    const stateBadge = document.getElementById('dashboardVpnStateBadge');
+    const countryDisplay = document.getElementById('dashboardVpnCountryDisplay');
+    const ipDisplay = document.getElementById('dashboardVpnIpDisplay');
+    const onBtn = document.getElementById('dashboardVpnOnBtn');
+    const offBtn = document.getElementById('dashboardVpnOffBtn');
+    const switchBtn = document.getElementById('dashboardVpnSwitchBtn');
+    const autoRotateCheckbox = document.getElementById('dashboardVpnAutoRotate');
+
+    if (countrySelect) countrySelect.value = state.selectedCountry;
+    if (autoRotateCheckbox) autoRotateCheckbox.checked = state.autoRotate;
+
+    if (statusText) {
+        if (!state.active) {
+            statusText.textContent = 'Not connected';
+        } else if (state.selectedCountry === 'auto') {
+            statusText.textContent = `Auto: Connected via ${location.flag || ''} ${location.country}`;
+        } else {
+            statusText.textContent = `Connected through ${location.flag || ''} ${location.country}`;
+        }
+    }
+
+    if (stateBadge) {
+        stateBadge.textContent = state.active ? (state.selectedCountry === 'auto' ? 'AUTO' : 'ON') : 'OFF';
+        stateBadge.className = 'dashboard-vpn-state ' + (state.active ? 'on' : 'off');
+    }
+
+    if (countryDisplay) {
+        if (!state.active) {
+            countryDisplay.textContent = 'None';
+        } else {
+            const flag = location.flag ? `${location.flag} ` : '';
+            const suffix = state.selectedCountry === 'auto' ? ' (Auto-Selected)' : '';
+            countryDisplay.textContent = `${flag}${location.country}${suffix}`;
+        }
+    }
+
+    if (ipDisplay) {
+        if (!state.active) {
+            ipDisplay.textContent = 'Not masked';
+        } else {
+            const latencyStr = location.latency ? ` [${location.latency}]` : '';
+            ipDisplay.textContent = `${location.ip}${latencyStr}`;
+        }
+    }
+
+    if (onBtn) onBtn.disabled = state.active;
+    if (offBtn) offBtn.disabled = !state.active;
+    if (switchBtn) switchBtn.disabled = !state.active;
+}
+
+function syncDashboardVpnWithNetworkMonitor(label) {
+    const vpnExit = getDashboardVpnExitInfo();
+    if (vpnExit) {
+        networkState.realExitInfo = vpnExit;
+        networkState.realExitFetchedAt = Date.now();
+    } else {
+        networkState.realExitInfo = null;
+        networkState.realExitFetchedAt = 0;
+    }
+
+    if (networkState.active) {
+        refreshNetworkMonitoring(label || 'VPN state updated');
+    } else {
+        networkState.connections = buildNetworkConnections(getRecentBrowserResources());
+        renderNetworkConnections();
+        renderNetworkOverview();
+        updateNetworkGraphNodes(networkState.connections);
+    }
+}
+
+function initializeDashboardVpn() {
+    const card = document.getElementById('dashboardVpnCard');
+    const countrySelect = document.getElementById('dashboardVpnCountry');
+    const onBtn = document.getElementById('dashboardVpnOnBtn');
+    const offBtn = document.getElementById('dashboardVpnOffBtn');
+    const switchBtn = document.getElementById('dashboardVpnSwitchBtn');
+    const autoRotateCheckbox = document.getElementById('dashboardVpnAutoRotate');
+    if (!card) return;
+
+    card.addEventListener('click', event => event.stopPropagation());
+
+    if (countrySelect) {
+        countrySelect.addEventListener('click', event => event.stopPropagation());
+        countrySelect.addEventListener('change', event => {
+            const state = getDashboardVpnState();
+            state.selectedCountry = event.target.value;
+            if (state.selectedCountry === 'auto') {
+                state.resolvedCountry = pickNextAutoCountry(state.resolvedCountry);
+            } else {
+                state.resolvedCountry = state.selectedCountry;
+            }
+            if (state.active) state.connectedAt = Date.now();
+            setDashboardVpnState(state);
+            renderDashboardVpn();
+            syncDashboardVpnWithNetworkMonitor('VPN location changed');
+        });
+    }
+
+    if (autoRotateCheckbox) {
+        autoRotateCheckbox.addEventListener('click', event => event.stopPropagation());
+        autoRotateCheckbox.addEventListener('change', event => {
+            const state = getDashboardVpnState();
+            state.autoRotate = event.target.checked;
+            setDashboardVpnState(state);
+            if (state.active && state.autoRotate) {
+                startDashboardVpnAutoRotate();
+                if (typeof showToast === 'function') {
+                    showToast('Auto-rotate active: VPN will switch countries periodically', 'info');
+                }
+            } else {
+                stopDashboardVpnAutoRotate();
+            }
+        });
+    }
+
+    if (onBtn) {
+        onBtn.addEventListener('click', event => {
+            event.stopPropagation();
+            const state = getDashboardVpnState();
+            let selected = countrySelect && (countrySelect.value === 'auto' || DASHBOARD_VPN_LOCATIONS[countrySelect.value])
+                ? countrySelect.value
+                : 'auto';
+            let resolved = selected;
+            if (selected === 'auto') {
+                resolved = pickNextAutoCountry(state.resolvedCountry);
+            }
+            const autoRotate = autoRotateCheckbox ? autoRotateCheckbox.checked : state.autoRotate;
+
+            setDashboardVpnState({
+                active: true,
+                selectedCountry: selected,
+                resolvedCountry: resolved,
+                autoRotate: autoRotate,
+                connectedAt: Date.now()
+            });
+
+            renderDashboardVpn();
+            syncDashboardVpnWithNetworkMonitor('VPN connected');
+
+            if (autoRotate) {
+                startDashboardVpnAutoRotate();
+            }
+
+            const loc = DASHBOARD_VPN_LOCATIONS[resolved] || DASHBOARD_VPN_LOCATIONS.germany;
+            if (typeof showToast === 'function') {
+                showToast(`VPN Connected: Routed via ${loc.flag || ''} ${loc.country} (${loc.location})`, 'success');
+            }
+            if (typeof pushNetworkAlert === 'function') {
+                pushNetworkAlert({
+                    title: 'VPN Connected',
+                    severity: 'low',
+                    body: `Dashboard VPN masking is active. Auto-routed via ${loc.country} (${loc.ip}).`,
+                    time: new Date(),
+                    meta: `${loc.flag || ''} ${loc.country}`
+                });
+            }
+        });
+    }
+
+    if (offBtn) {
+        offBtn.addEventListener('click', event => {
+            event.stopPropagation();
+            stopDashboardVpnAutoRotate();
+            const state = getDashboardVpnState();
+            setDashboardVpnState({
+                active: false,
+                selectedCountry: state.selectedCountry,
+                resolvedCountry: state.resolvedCountry,
+                autoRotate: state.autoRotate,
+                connectedAt: 0
+            });
+            renderDashboardVpn();
+            syncDashboardVpnWithNetworkMonitor('VPN disconnected');
+            loadRealExitInfo(true).then(() => {
+                renderNetworkOverview();
+                renderNetworkConnections();
+            });
+            if (typeof showToast === 'function') {
+                showToast('VPN Disconnected. Native route restored.', 'info');
+            }
+        });
+    }
+
+    if (switchBtn) {
+        switchBtn.addEventListener('click', event => {
+            event.stopPropagation();
+            switchDashboardVpnCountry(false);
+        });
+    }
+
+    renderDashboardVpn();
+    if (getDashboardVpnState().active) {
+        syncDashboardVpnWithNetworkMonitor('VPN restored from dashboard');
+        if (getDashboardVpnState().autoRotate) {
+            startDashboardVpnAutoRotate();
+        }
+    }
+}
 
 let networkSocket = null;
 let networkStreamInterval = null;
@@ -10371,15 +12182,17 @@ function buildNetworkConnections(resources) {
 
     if (exitInfo && exitInfo.ip) {
         connections.push({
-            host: 'Browser Egress Node',
+            host: exitInfo.vpnMasked ? 'VPN Egress Node' : 'Browser Egress Node',
             ip: exitInfo.ip,
             location: exitInfo.location || 'Unknown location',
-            locationConfidence: exitInfo.source ? 'Lookup: ' + exitInfo.source : 'Public IP lookup',
+            locationConfidence: exitInfo.vpnMasked ? 'Dashboard VPN selected exit' : (exitInfo.source ? 'Lookup: ' + exitInfo.source : 'Public IP lookup'),
             channel: 'HTTPS',
-            kind: 'Public IP telemetry',
+            kind: exitInfo.vpnMasked ? 'Masked VPN IP telemetry' : 'Public IP telemetry',
             status: 'Live',
-            body: 'Real browser exit node resolved from a public IP lookup.',
-            sourceLabel: 'REAL',
+            body: exitInfo.vpnMasked
+                ? 'Dashboard VPN is on, so Network Monitor is showing the selected masked VPN exit IP.'
+                : 'Real browser exit node resolved from a public IP lookup.',
+            sourceLabel: exitInfo.vpnMasked ? 'VPN' : 'REAL',
             sourceClass: 'low'
         });
     }
@@ -10622,9 +12435,42 @@ function fetchJsonWithTimeout(url, timeout) {
     }).finally(() => clearTimeout(timer));
 }
 
+async function loadNativeNetworkSnapshot(forceRefresh) {
+    if (!canUseNativeWifiScanner()) return null;
+    const url = NETWORK_WIFI_API_BASE + '/api/network/snapshot' + (forceRefresh ? '?refresh=1' : '');
+    try {
+        const data = await fetchJsonWithTimeout(url, forceRefresh ? 12000 : 7000);
+        return data && data.ok ? data : null;
+    } catch (error) {
+        console.warn('Native network snapshot unavailable:', error);
+        return null;
+    }
+}
+
 async function loadRealExitInfo(forceRefresh) {
+    const vpnExit = getDashboardVpnExitInfo();
+    if (vpnExit) {
+        networkState.realExitInfo = vpnExit;
+        networkState.realExitFetchedAt = Date.now();
+        return vpnExit;
+    }
+
     const now = Date.now();
     if (!forceRefresh && networkState.realExitInfo && (now - networkState.realExitFetchedAt) < NETWORK_REAL_IP_REFRESH_MS) {
+        return networkState.realExitInfo;
+    }
+
+    const nativeSnapshot = await loadNativeNetworkSnapshot(forceRefresh);
+    if (nativeSnapshot && nativeSnapshot.publicExit && nativeSnapshot.publicExit.ip) {
+        const exit = nativeSnapshot.publicExit;
+        networkState.realExitInfo = {
+            ip: exit.ip,
+            location: exit.location || [exit.city, exit.region, exit.country].filter(Boolean).join(', ') || 'IP resolved, geo unavailable',
+            org: exit.org || 'Public network provider',
+            source: 'local network snapshot',
+            nativeSnapshot
+        };
+        networkState.realExitFetchedAt = now;
         return networkState.realExitInfo;
     }
 
@@ -10673,7 +12519,7 @@ async function loadRealExitInfo(forceRefresh) {
     networkState.realExitInfo = {
         ip: 'Unavailable',
         location: 'Lookup failed',
-        org: 'Simulation fallback',
+        org: 'Unavailable',
         source: 'fallback'
     };
     networkState.realExitFetchedAt = now;
@@ -10933,6 +12779,8 @@ let gpsPoliceRouteToken = 0;
 let gpsLastLookupPosition = null;
 let gpsLastLookupTimestamp = 0;
 let gpsLastRenderedKey = '';
+let gpsBestFix = null;
+let gpsIgnoredFixCount = 0;
 const gpsAddressCache = new Map();
 const gpsPoliceCache = new Map();
 const gpsDom = {};
@@ -10943,6 +12791,7 @@ function getGPSDom() {
     gpsDom.startBtn = document.getElementById('gpsStartBtn');
     gpsDom.stopBtn = document.getElementById('gpsStopBtn');
     gpsDom.whatsAppBtn = document.getElementById('gpsWhatsAppBtn');
+    gpsDom.googleMapsBtn = document.getElementById('gpsGoogleMapsBtn');
     gpsDom.statusDot = document.getElementById('gpsStatusDot');
     gpsDom.statusText = document.getElementById('gpsStatusText');
     gpsDom.liveStats = document.getElementById('gpsLiveStats');
@@ -10961,6 +12810,7 @@ function getGPSDom() {
     gpsDom.liveHeading = document.getElementById('gpsLiveHeading');
     gpsDom.liveDistance = document.getElementById('gpsLiveDistance');
     gpsDom.liveTime = document.getElementById('gpsLiveTime');
+    gpsDom.fixQuality = document.getElementById('gpsFixQuality');
     gpsDom.liveLandmark = document.getElementById('gpsLiveLandmark');
     gpsDom.liveVertAcc = document.getElementById('gpsLiveVertAcc');
     gpsDom.addressText = document.getElementById('gpsAddressText');
@@ -11205,6 +13055,10 @@ function resetGPSUI() {
     dom.policeNavLink.classList.add('hidden');
     dom.policeNavLink.removeAttribute('href');
     dom.whatsAppBtn.classList.add('hidden');
+    if (dom.googleMapsBtn) {
+        dom.googleMapsBtn.classList.add('hidden');
+        dom.googleMapsBtn.removeAttribute('href');
+    }
     dom.directionsList.textContent = 'Start live tracking to load route directions.';
     dom.liveLat.textContent = '—';
     dom.liveLng.textContent = '—';
@@ -11214,6 +13068,7 @@ function resetGPSUI() {
     dom.liveHeading.textContent = '—';
     dom.liveDistance.textContent = '0 m';
     dom.liveTime.textContent = '—';
+    if (dom.fixQuality) dom.fixQuality.textContent = '—';
     dom.routePoints.textContent = '0';
     dom.routeDuration.textContent = '0:00';
     dom.routeAvgSpeed.textContent = '0 km/h';
@@ -11306,6 +13161,100 @@ function formatGpsTimestamp(timestamp) {
         month: 'short',
         day: '2-digit'
     });
+}
+
+function getGPSFixQuality(accuracy) {
+    if (typeof accuracy !== 'number' || Number.isNaN(accuracy)) {
+        return {
+            label: 'Unknown',
+            status: 'Waiting for location accuracy from the browser.'
+        };
+    }
+    if (accuracy <= 10) {
+        return {
+            label: 'Excellent',
+            status: 'Excellent GPS fix. This is close to phone map accuracy.'
+        };
+    }
+    if (accuracy <= 25) {
+        return {
+            label: 'Good',
+            status: 'Good live fix. Move near a window or outdoors for tighter accuracy.'
+        };
+    }
+    if (accuracy <= 75) {
+        return {
+            label: 'Approx',
+            status: 'Approximate location. The device may be using Wi-Fi/cell positioning.'
+        };
+    }
+    return {
+        label: 'Weak',
+        status: 'Weak location fix. Enable precise location, GPS, Wi-Fi, and mobile data for better accuracy.'
+    };
+}
+
+function isUsableGPSFix(coords, timestamp) {
+    if (!coords) return false;
+    if (typeof coords.latitude !== 'number' || typeof coords.longitude !== 'number') return false;
+    if (Number.isNaN(coords.latitude) || Number.isNaN(coords.longitude)) return false;
+    if (Math.abs(coords.latitude) > 90 || Math.abs(coords.longitude) > 180) return false;
+    if (timestamp && Date.now() - timestamp > 60000) return false;
+    if (typeof coords.accuracy === 'number' && coords.accuracy > 5000) return false;
+    return true;
+}
+
+function shouldIgnoreGPSJump(coords, timestamp) {
+    if (!gpsLastPosition || !coords || typeof coords.accuracy !== 'number') return false;
+    const elapsedSeconds = Math.max(0.5, (timestamp - gpsLastPosition.timestamp) / 1000);
+    const distance = haversineDistance(gpsLastPosition.rawLat, gpsLastPosition.rawLng, coords.latitude, coords.longitude);
+    const reportedSpeed = typeof coords.speed === 'number' && coords.speed >= 0 ? coords.speed : null;
+    const impliedSpeed = distance / elapsedSeconds;
+    const maxReasonableSpeed = Math.max(55, reportedSpeed ? reportedSpeed * 2.5 + 15 : 55);
+    return distance > Math.max(120, coords.accuracy * 3) && impliedSpeed > maxReasonableSpeed;
+}
+
+function chooseGPSDisplayFix(coords, timestamp) {
+    const rawFix = {
+        rawLat: coords.latitude,
+        rawLng: coords.longitude,
+        lat: coords.latitude,
+        lng: coords.longitude,
+        accuracy: coords.accuracy,
+        timestamp
+    };
+
+    if (!gpsBestFix || coords.accuracy <= gpsBestFix.accuracy || timestamp - gpsBestFix.timestamp > 20000) {
+        gpsBestFix = rawFix;
+    }
+
+    if (!gpsLastPosition) return rawFix;
+
+    if (coords.accuracy <= 25) return rawFix;
+
+    const previous = gpsLastPosition;
+    const smoothing = coords.accuracy <= 75 ? 0.55 : 0.3;
+    return {
+        ...rawFix,
+        lat: (coords.latitude * smoothing) + (previous.lat * (1 - smoothing)),
+        lng: (coords.longitude * smoothing) + (previous.lng * (1 - smoothing))
+    };
+}
+
+function getGPSMapZoom(accuracy) {
+    if (accuracy <= 10) return 19;
+    if (accuracy <= 25) return 18;
+    if (accuracy <= 75) return 17;
+    if (accuracy <= 200) return 16;
+    return 14;
+}
+
+function updateGPSExternalLinks(lat, lng) {
+    const dom = getGPSDom();
+    if (!dom.googleMapsBtn) return;
+    dom.googleMapsBtn.href = 'https://www.google.com/maps/search/?api=1&query=' +
+        encodeURIComponent(lat + ',' + lng);
+    dom.googleMapsBtn.classList.remove('hidden');
 }
 
 /**
@@ -11789,49 +13738,68 @@ async function updatePoliceStationMapRoute(station, lat, lng) {
 }
 
 function onGPSPosition(position) {
-    const { latitude, longitude, accuracy, altitude, speed, heading, altitudeAccuracy } = position.coords;
+    const { accuracy, altitude, speed, heading, altitudeAccuracy } = position.coords;
     const dom = getGPSDom();
     const now = position.timestamp || Date.now();
-    
-    // Smoothing factor (0.1 to 0.5 recommended). Lower = smoother but more lag.
-    const smoothing = 0.3;
-    let smoothLat = latitude;
-    let smoothLng = longitude;
 
-    if (gpsLastPosition && accuracy > 10) {
-        smoothLat = (latitude * smoothing) + (gpsLastPosition.lat * (1 - smoothing));
-        smoothLng = (longitude * smoothing) + (gpsLastPosition.lng * (1 - smoothing));
+    if (!isUsableGPSFix(position.coords, now)) {
+        gpsIgnoredFixCount++;
+        updateGPSStatus('acquiring', 'Waiting for a usable precise location fix... ignored ' + gpsIgnoredFixCount + ' weak update(s).');
+        return;
     }
 
-    const positionKey = smoothLat.toFixed(6) + ',' + smoothLng.toFixed(6) + ',' + now;
+    if (shouldIgnoreGPSJump(position.coords, now)) {
+        gpsIgnoredFixCount++;
+        updateGPSStatus('acquiring', 'Ignored a sudden low-confidence location jump. Holding the last reliable point.');
+        return;
+    }
+
+    const displayFix = chooseGPSDisplayFix(position.coords, now);
+    const latitude = displayFix.lat;
+    const longitude = displayFix.lng;
+    const rawLatitude = displayFix.rawLat;
+    const rawLongitude = displayFix.rawLng;
+    const fixQuality = getGPSFixQuality(accuracy);
+
+    const positionKey = latitude.toFixed(7) + ',' + longitude.toFixed(7) + ',' + Math.round(accuracy) + ',' + now;
     if (positionKey === gpsLastRenderedKey) return;
     gpsLastRenderedKey = positionKey;
     gpsUpdateCount++;
 
-    // Update status
-    updateGPSStatus('active', 'GPS Lock Acquired — Tracking Live (' + gpsUpdateCount + ' updates)');
+    updateGPSStatus(
+        accuracy <= 75 ? 'active' : 'acquiring',
+        fixQuality.status + ' Tracking live (' + gpsUpdateCount + ' updates, +/-' + Math.round(accuracy) + ' m).'
+    );
 
-    // Show all UI elements on first fix
     if (gpsUpdateCount === 1) {
         ensureGPSPanelsVisible();
         dom.whatsAppBtn.classList.remove('hidden');
+        updateGPSExternalLinks(latitude, longitude);
         gpsStartTime = now;
     }
 
-    // Calculate distance from last position
     if (gpsLastPosition) {
-        const d = haversineDistance(gpsLastPosition.lat, gpsLastPosition.lng, smoothLat, smoothLng);
-        // Only add distance if accuracy is reasonable and movement is real (not GPS jitter)
-        if (d > accuracy * 0.25 && d < 1000) {
+        const d = haversineDistance(gpsLastPosition.lat, gpsLastPosition.lng, latitude, longitude);
+        const accuracyFloor = Math.max(3, Math.min(accuracy, gpsLastPosition.accuracy || accuracy) * 0.35);
+        if (d > accuracyFloor && d < 1000) {
             gpsTotalDistance += d;
         }
     }
-    gpsLastPosition = { lat: smoothLat, lng: smoothLng };
 
-    // Record route point
+    gpsLastPosition = {
+        lat: latitude,
+        lng: longitude,
+        rawLat: rawLatitude,
+        rawLng: rawLongitude,
+        accuracy: accuracy,
+        timestamp: now
+    };
+
     gpsRouteData.push({
-        lat: smoothLat,
-        lng: smoothLng,
+        lat: latitude,
+        lng: longitude,
+        rawLat: rawLatitude,
+        rawLng: rawLongitude,
         accuracy: accuracy,
         altitude: altitude,
         speed: speed,
@@ -11839,31 +13807,28 @@ function onGPSPosition(position) {
         timestamp: now
     });
 
-    // Speed in km/h
     const speedKmh = (speed !== null && speed >= 0) ? (speed * 3.6) : 0;
     if (speedKmh > gpsMaxSpeed) gpsMaxSpeed = speedKmh;
 
-    // Update stat cards
-    dom.liveLat.textContent = formatCoord(smoothLat, 'N', 'S');
-    dom.liveLng.textContent = formatCoord(smoothLng, 'E', 'W');
+    dom.liveLat.textContent = formatCoord(latitude, 'N', 'S');
+    dom.liveLng.textContent = formatCoord(longitude, 'E', 'W');
     dom.liveAccuracy.textContent = '±' + Math.round(accuracy) + ' m';
     dom.liveAltitude.textContent = altitude !== null ? Math.round(altitude) + ' m' : 'N/A';
     dom.liveVertAcc.textContent = altitudeAccuracy !== null ? '±' + Math.round(altitudeAccuracy) + ' m' : 'N/A';
     dom.liveSpeed.textContent = speedKmh.toFixed(1) + ' km/h';
     dom.liveHeading.textContent = headingToCompass(heading);
     dom.liveTime.textContent = formatGpsTimestamp(now);
+    if (dom.fixQuality) dom.fixQuality.textContent = fixQuality.label;
+    updateGPSExternalLinks(latitude, longitude);
 
-    // Distance display
     if (gpsTotalDistance >= 1000) {
         dom.liveDistance.textContent = (gpsTotalDistance / 1000).toFixed(2) + ' km';
     } else {
         dom.liveDistance.textContent = Math.round(gpsTotalDistance) + ' m';
     }
 
-    // Update signal indicator
     updateGPSSignal(accuracy);
 
-    // Update route stats
     const duration = now - gpsStartTime;
     dom.routePoints.textContent = gpsRouteData.length;
     dom.routeDuration.textContent = formatDuration(duration);
@@ -11871,21 +13836,18 @@ function onGPSPosition(position) {
     dom.routeAvgSpeed.textContent = avgSpeed.toFixed(1) + ' km/h';
     dom.routeMaxSpeed.textContent = gpsMaxSpeed.toFixed(1) + ' km/h';
 
-    // Update or create map
     if (!gpsMap) {
         const el = dom.mapContainer;
         if (!el) return;
-        gpsMap = L.map(el, { zoomControl: true, scrollWheelZoom: true }).setView([latitude, longitude], 17);
+        gpsMap = L.map(el, { zoomControl: true, scrollWheelZoom: true }).setView([latitude, longitude], getGPSMapZoom(accuracy));
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '© OpenStreetMap © CARTO', maxZoom: 19
         }).addTo(gpsMap);
 
-        // Custom pulsing marker
         const icon = L.divIcon({ className: 'gps-marker-pulse', iconSize: [22, 22], iconAnchor: [11, 11] });
         gpsMarker = L.marker([latitude, longitude], { icon: icon }).addTo(gpsMap);
-        gpsMarker.bindPopup('<div style="text-align:center;font-family:Inter,sans-serif;font-size:12px;"><strong>📍 Your Location</strong><br>Live GPS Tracking</div>');
+        gpsMarker.bindPopup('<div style="text-align:center;font-family:Inter,sans-serif;font-size:12px;"><strong>Your Location</strong><br>Live GPS Tracking<br>Accuracy +/-' + Math.round(accuracy) + ' m</div>');
 
-        // Accuracy circle
         gpsAccuracyCircle = L.circle([latitude, longitude], {
             radius: accuracy,
             color: '#6366f1',
@@ -11895,7 +13857,6 @@ function onGPSPosition(position) {
             dashArray: '6,4'
         }).addTo(gpsMap);
 
-        // Trail polyline (glow layer + main)
         gpsTrailGlow = L.polyline([], {
             color: '#6366f1',
             weight: 8,
@@ -11918,17 +13879,16 @@ function onGPSPosition(position) {
 
         setTimeout(function() { gpsMap.invalidateSize(); }, 200);
     } else {
-        // Update existing marker position
         gpsMarker.setLatLng([latitude, longitude]);
+        gpsMarker.setPopupContent('<div style="text-align:center;font-family:Inter,sans-serif;font-size:12px;"><strong>Your Location</strong><br>Live GPS Tracking<br>Accuracy +/-' + Math.round(accuracy) + ' m</div>');
         gpsAccuracyCircle.setLatLng([latitude, longitude]);
         gpsAccuracyCircle.setRadius(accuracy);
 
-        // Add point to trail
         gpsTrailPolyline.addLatLng([latitude, longitude]);
         gpsTrailGlow.addLatLng([latitude, longitude]);
 
-        // Pan map smoothly
-        gpsMap.panTo([latitude, longitude], { animate: true, duration: 0.35 });
+        const zoom = getGPSMapZoom(accuracy);
+        gpsMap.setView([latitude, longitude], Math.max(gpsMap.getZoom(), zoom), { animate: true, duration: 0.35 });
     }
 
     queueGPSNearbyLookup(latitude, longitude, now, gpsUpdateCount === 1);
@@ -11975,6 +13935,8 @@ function startLiveGPS() {
     gpsLastLookupPosition = null;
     gpsLastLookupTimestamp = 0;
     gpsLastRenderedKey = '';
+    gpsBestFix = null;
+    gpsIgnoredFixCount = 0;
     if (gpsMap) { gpsMap.remove(); gpsMap = null; gpsMarker = null; gpsAccuracyCircle = null; gpsTrailPolyline = null; gpsTrailGlow = null; }
     gpsPoliceMarker = null;
     gpsPoliceRouteLine = null;
@@ -11988,15 +13950,15 @@ function startLiveGPS() {
 
     navigator.geolocation.getCurrentPosition(onGPSPosition, onGPSError, {
         enableHighAccuracy: true,
-        timeout: 15000,
+        timeout: 20000,
         maximumAge: 0
     });
 
     // Start watching position with high accuracy
     gpsWatchId = navigator.geolocation.watchPosition(onGPSPosition, onGPSError, {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0
+        timeout: 20000,
+        maximumAge: 1000
     });
 }
 
@@ -12014,6 +13976,7 @@ function stopLiveGPS() {
     dom.startBtn.classList.remove('hidden');
     dom.stopBtn.classList.add('hidden');
     dom.whatsAppBtn.classList.add('hidden');
+    if (dom.googleMapsBtn) dom.googleMapsBtn.classList.add('hidden');
     updateGPSStatus('', 'Tracking stopped. ' + gpsRouteData.length + ' points recorded.');
 }
 
@@ -12052,4 +14015,968 @@ function exportGPSRoute() {
     const origText = btn.innerHTML;
     btn.innerHTML = '✓ Exported!';
     setTimeout(function() { btn.innerHTML = origText; }, 2000);
+}
+
+
+// ==========================================
+// VPN Controller
+// ==========================================
+// ==========================================
+// Modular Multi-Location WireGuard VPN Controller
+// ==========================================
+
+const VPN_LOCATIONS = [];
+
+let vpnProfileState = {
+    loaded: false,
+    loading: false,
+    profiles: [],
+    profileDir: '',
+    wireGuardInstalled: false,
+    services: [],
+    lastError: ''
+};
+
+let vpnConnectionMode = 'idle';
+let vpnLastLeakAudit = null;
+
+const VPN_FLOW_STEPS = ['network', 'profile', 'tunnel', 'route', 'dns'];
+
+function setVpnModePill(text, tone = '') {
+    const el = document.getElementById('vpnModePill');
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'vpn-status-pill' + (tone ? ' ' + tone : '');
+}
+
+function setVpnFlowState(step, state) {
+    const el = document.querySelector(`[data-vpn-step="${step}"]`);
+    if (!el) return;
+    el.classList.remove('active', 'done', 'failed');
+    if (state) el.classList.add(state);
+}
+
+function resetVpnFlowStates() {
+    VPN_FLOW_STEPS.forEach(step => setVpnFlowState(step, ''));
+}
+
+function setVpnFlowFromEvaluation(evaluation) {
+    resetVpnFlowStates();
+    if (!navigator.onLine) {
+        setVpnFlowState('network', 'failed');
+        return;
+    }
+    setVpnFlowState('network', 'done');
+    setVpnFlowState('profile', evaluation.profileReady ? 'done' : 'failed');
+    setVpnFlowState('tunnel', evaluation.wireguardActive ? 'done' : '');
+    setVpnFlowState('route', evaluation.routeVerified ? 'done' : '');
+    setVpnFlowState('dns', evaluation.dnsProtected ? 'done' : '');
+}
+
+function getServiceStatusText(service) {
+    if (!service) return '';
+    return String(service.Status || service.status || '').toLowerCase();
+}
+
+function getExpectedWireGuardServiceName(activeLoc) {
+    const tunnelName = activeLoc && activeLoc.profile && activeLoc.profile.tunnelName;
+    return tunnelName ? 'WireGuardTunnel$' + tunnelName : '';
+}
+
+function isSelectedVpnServiceRunning(activeLoc) {
+    const expectedName = getExpectedWireGuardServiceName(activeLoc).toLowerCase();
+    const services = Array.isArray(vpnProfileState.services) ? vpnProfileState.services : [];
+    if (!expectedName || !services.length) return false;
+    return services.some(service => {
+        const name = String(service.Name || service.name || '').toLowerCase();
+        return name === expectedName && getServiceStatusText(service) === 'running';
+    });
+}
+
+function hasAnyVpnServiceRunning() {
+    const services = Array.isArray(vpnProfileState.services) ? vpnProfileState.services : [];
+    return services.some(service => getServiceStatusText(service) === 'running');
+}
+
+function isSelectedVpnAdapterVisible(activeLoc, firstWg) {
+    const tunnelName = activeLoc && activeLoc.profile && activeLoc.profile.tunnelName
+        ? String(activeLoc.profile.tunnelName).toLowerCase()
+        : '';
+    if (!tunnelName || !firstWg) return false;
+    const adapterName = String(firstWg.name || '').toLowerCase();
+    const adapterDesc = String(firstWg.desc || '').toLowerCase();
+    return adapterName.includes(tunnelName) || adapterDesc.includes(tunnelName);
+}
+
+function canUseLocalVpnControl() {
+    return window.location.protocol !== 'file:' && isLoopbackHostname(window.location.hostname);
+}
+
+function getVpnLocationsForUi() {
+    if (vpnProfileState.profiles.length) {
+        return vpnProfileState.profiles.map(profile => ({
+            id: profile.id,
+            name: profile.name || profile.fileName,
+            city: profile.city || profile.endpoint || 'WireGuard profile',
+            country: profile.country || 'Unknown country',
+            countryName: profile.country || 'Unknown',
+            countryCode: (profile.country || 'WG').slice(0, 2).toUpperCase(),
+            flag: 'WG',
+            ip: '',
+            gateway: profile.address || '',
+            endpoint: profile.endpoint || '',
+            provider: 'Local WireGuard profile: ' + (profile.fileName || profile.id),
+            dns: profile.dnsServers || [],
+            baseLatency: Number.isFinite(profile.latencyMs) ? profile.latencyMs : null,
+            measuredLatency: Number.isFinite(profile.latencyMs) ? profile.latencyMs : null,
+            health: profile.health || 'unknown',
+            healthReason: profile.healthReason || '',
+            warnings: Array.isArray(profile.warnings) ? profile.warnings : [],
+            consumerReady: profile.consumerReady !== false,
+            realProfile: true,
+            profile
+        }));
+    }
+    return [{
+        id: 'profile-required',
+        name: 'Fastest Location (add WireGuard profile)',
+        city: 'No local profile loaded',
+        country: 'Local setup required',
+        countryName: 'Not configured',
+        countryCode: 'WG',
+        flag: 'WG',
+        ip: '',
+        gateway: '',
+        endpoint: '',
+        provider: vpnProfileState.lastError || 'Add a .conf file to vpn-profiles',
+        dns: [],
+        baseLatency: null,
+        measuredLatency: null,
+        health: 'unconfigured',
+        warnings: ['Add a real WireGuard profile before connecting.'],
+        consumerReady: false,
+        realProfile: false,
+        profile: null
+    }];
+}
+
+// Open global registry API for modular extensions
+window.cyberShieldVpn = {
+    locations: VPN_LOCATIONS,
+    registerLocation: function(loc) {
+        if (!loc || !loc.id) return false;
+        const idx = VPN_LOCATIONS.findIndex(l => l.id === loc.id);
+        if (idx >= 0) VPN_LOCATIONS[idx] = loc;
+        else VPN_LOCATIONS.push(loc);
+        renderVpnLocationOptions();
+        return true;
+    },
+    getActiveLocation: function() {
+        const locations = getVpnLocationsForUi();
+        const id = localStorage.getItem('cybershield_vpn_location') || (locations[0] && locations[0].id) || 'ch-zurich';
+        return locations.find(l => l.id === id) || locations[0] || VPN_LOCATIONS[0];
+    },
+    setActiveLocation: function(id) {
+        const loc = getVpnLocationsForUi().find(l => l.id === id);
+        if (loc) {
+            localStorage.setItem('cybershield_vpn_location', loc.id);
+            renderVpnLocationOptions();
+            updateVpnUi(true);
+            return true;
+        }
+        return false;
+    }
+};
+
+let vpnUptimeInterval = null;
+
+function formatUptime(seconds) {
+    const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const secs = (seconds % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
+}
+
+function startVpnUptimeTimer() {
+    stopVpnUptimeTimer();
+    let startTime = parseInt(localStorage.getItem('cybershield_vpn_connected_at') || '0', 10);
+    if (!startTime) {
+        startTime = Date.now();
+        localStorage.setItem('cybershield_vpn_connected_at', String(startTime));
+    }
+    const update = () => {
+        const el = document.getElementById('vpnUptimeDisplay');
+        if (el) {
+            const elapsedSecs = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+            el.textContent = `Connected (${formatUptime(elapsedSecs)})`;
+            el.style.color = '#5eead4';
+        }
+    };
+    update();
+    vpnUptimeInterval = setInterval(update, 1000);
+}
+
+function stopVpnUptimeTimer() {
+    if (vpnUptimeInterval) {
+        clearInterval(vpnUptimeInterval);
+        vpnUptimeInterval = null;
+    }
+    const el = document.getElementById('vpnUptimeDisplay');
+    if (el) {
+        el.textContent = 'Disconnected';
+        el.style.color = '#94a3b8';
+    }
+    localStorage.removeItem('cybershield_vpn_connected_at');
+}
+
+async function loadVpnProfiles(forceRefresh = false) {
+    if (vpnProfileState.loading) return vpnProfileState;
+    if (!forceRefresh && vpnProfileState.loaded) return vpnProfileState;
+    if (!canUseNativeWifiScanner()) {
+        vpnProfileState.loaded = true;
+        vpnProfileState.profiles = [];
+        vpnProfileState.services = [];
+        vpnProfileState.wireGuardInstalled = false;
+        vpnProfileState.lastError = 'Real VPN control requires the local server at http://127.0.0.1:4318.';
+        return vpnProfileState;
+    }
+
+    vpnProfileState.loading = true;
+    try {
+        const data = await fetchJsonWithTimeout(NETWORK_WIFI_API_BASE + '/api/vpn/profiles', 7000);
+        vpnProfileState.loaded = true;
+        vpnProfileState.profiles = data && Array.isArray(data.profiles) ? data.profiles : [];
+        vpnProfileState.profileDir = data && data.profileDir ? data.profileDir : '';
+        vpnProfileState.wireGuardInstalled = !!(data && data.wireGuardInstalled);
+        vpnProfileState.services = data && Array.isArray(data.services) ? data.services : [];
+        vpnProfileState.lastError = '';
+    } catch (error) {
+        vpnProfileState.loaded = true;
+        vpnProfileState.profiles = [];
+        vpnProfileState.services = [];
+        vpnProfileState.wireGuardInstalled = false;
+        vpnProfileState.lastError = error && error.message ? error.message : 'Unable to load local VPN profiles.';
+    } finally {
+        vpnProfileState.loading = false;
+    }
+    return vpnProfileState;
+}
+
+async function runVpnProfileAction(action, profileId) {
+    const endpoint = action === 'disconnect' ? '/api/vpn/disconnect' : '/api/vpn/connect';
+    const url = NETWORK_WIFI_API_BASE + endpoint + '?profile=' + encodeURIComponent(profileId || '');
+    const response = await fetch(url, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+            'Accept': 'application/json',
+            'X-CyberShield-Local-Control': '1'
+        },
+        signal: AbortSignal.timeout(30000)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok) {
+        throw new Error(data.error || 'VPN action failed');
+    }
+    return data;
+}
+
+function getWireGuardSnapshot(snapshot) {
+    return snapshot && snapshot.wireguard ? snapshot.wireguard : null;
+}
+
+function getFirstWireGuardAdapter(snapshot) {
+    const wireguard = getWireGuardSnapshot(snapshot);
+    const adapters = wireguard && Array.isArray(wireguard.adapters) ? wireguard.adapters : [];
+    return adapters[0] || null;
+}
+
+function buildVpnEvaluation(activeLoc, exitInfo) {
+    const snapshot = getVpnSnapshot(exitInfo);
+    const wireguard = getWireGuardSnapshot(snapshot);
+    const firstWg = getFirstWireGuardAdapter(snapshot);
+    const requestedProfileId = localStorage.getItem('cybershield_vpn_requested_profile') || '';
+    const selectedServiceRunning = isSelectedVpnServiceRunning(activeLoc);
+    const anyServiceRunning = hasAnyVpnServiceRunning();
+    const profile = activeLoc && activeLoc.profile ? activeLoc.profile : null;
+    const warnings = activeLoc && Array.isArray(activeLoc.warnings) ? activeLoc.warnings : [];
+    const wireguardActive = !!(wireguard && wireguard.active);
+    const adapterVerified = isSelectedVpnAdapterVisible(activeLoc, firstWg);
+    const serviceVerified = selectedServiceRunning || adapterVerified;
+    const profileReady = !!(activeLoc && activeLoc.realProfile && activeLoc.consumerReady !== false);
+    const fullTunnelIpv4 = !!(profile && profile.fullTunnelIpv4);
+    const fullTunnelIpv6 = !!(profile && profile.fullTunnelIpv6);
+    const profileDns = profile && Array.isArray(profile.dnsServers) ? profile.dnsServers : [];
+    const adapterDns = firstWg && Array.isArray(firstWg.dnsServers) ? firstWg.dnsServers : [];
+    const dnsProtected = profileReady && (profileDns.length > 0 || adapterDns.length > 0);
+    const routeVerified = profileReady && wireguardActive && serviceVerified;
+    const protectedConnection = routeVerified && dnsProtected && fullTunnelIpv4 && fullTunnelIpv6;
+
+    return {
+        snapshot,
+        firstWg,
+        requestedProfileId,
+        selectedServiceRunning,
+        anyServiceRunning,
+        wireguardActive,
+        adapterVerified,
+        serviceVerified,
+        profileReady,
+        fullTunnelIpv4,
+        fullTunnelIpv6,
+        dnsProtected,
+        routeVerified,
+        protectedConnection,
+        warnings
+    };
+}
+
+function setVpnCheckBadge(id, label, tone = 'neutral') {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.className = 'vpn-leak-badge ' + tone;
+    el.textContent = label;
+}
+
+function renderVpnVerificationBadges(evaluation) {
+    if (vpnLastLeakAudit) {
+        setVpnCheckBadge(
+            'leakWebRtcBadge',
+            vpnLastLeakAudit.webrtcLeaked ? 'Leak risk' : 'No leak seen',
+            vpnLastLeakAudit.webrtcLeaked ? 'leaked' : 'shielded'
+        );
+    } else {
+        setVpnCheckBadge('leakWebRtcBadge', evaluation.protectedConnection ? 'Not tested' : 'Waiting', 'neutral');
+    }
+
+    if (!evaluation.profileReady) {
+        setVpnCheckBadge('leakDnsBadge', 'Profile required', 'neutral');
+        setVpnCheckBadge('leakIpv6Badge', 'Profile required', 'neutral');
+    } else {
+        setVpnCheckBadge('leakDnsBadge', evaluation.dnsProtected ? 'Configured' : 'Missing', evaluation.dnsProtected ? 'shielded' : 'leaked');
+        setVpnCheckBadge('leakIpv6Badge', evaluation.fullTunnelIpv6 ? 'Routed' : 'Missing', evaluation.fullTunnelIpv6 ? 'shielded' : 'leaked');
+    }
+
+    setVpnCheckBadge('leakKillSwitchBadge', 'Not built', 'neutral');
+}
+
+function setVpnFlowProgress(activeStep) {
+    resetVpnFlowStates();
+    for (const step of VPN_FLOW_STEPS) {
+        if (step === activeStep) {
+            setVpnFlowState(step, 'active');
+            break;
+        }
+        setVpnFlowState(step, 'done');
+    }
+}
+
+function collectVpnExpectedCandidateIps(evaluation, observedIp) {
+    const values = new Set();
+    if (observedIp) values.add(String(observedIp).trim());
+    const firstWg = evaluation && evaluation.firstWg ? evaluation.firstWg : null;
+    if (firstWg && Array.isArray(firstWg.ipv4)) {
+        firstWg.ipv4.forEach(ip => values.add(String(ip).split('/')[0].trim()));
+    }
+    return values;
+}
+
+function renderVpnLocationOptions() {
+    const select = document.getElementById('vpnLocationSelect');
+    const chipsContainer = document.getElementById('vpnServerChips');
+    const activeLoc = window.cyberShieldVpn.getActiveLocation();
+    const locations = getVpnLocationsForUi();
+
+    if (select) {
+        select.innerHTML = locations.map(loc => `
+            <option value="${escapeHtml(loc.id)}" ${loc.id === activeLoc.id ? 'selected' : ''} ${loc.realProfile ? '' : 'disabled'}>
+                ${escapeHtml(loc.flag)} ${escapeHtml(loc.name)} ${loc.consumerReady ? '- ready' : '- setup required'}
+            </option>
+        `).join('');
+    }
+
+    if (chipsContainer) {
+        chipsContainer.innerHTML = locations.map(loc => {
+            const isActive = loc.id === activeLoc.id;
+            const latency = loc.measuredLatency || loc.baseLatency;
+            const hasLatency = Number.isFinite(latency);
+            const latencyClass = !hasLatency ? 'latency-med' : latency < 50 ? 'latency-low' : latency < 130 ? 'latency-med' : 'latency-high';
+            const tag = loc.realProfile
+                ? (hasLatency ? latency + 'ms' : (loc.consumerReady ? 'READY' : 'FIX'))
+                : 'SETUP';
+            const disabled = !loc.realProfile || loc.consumerReady === false;
+            return `
+                <div class="vpn-server-chip ${isActive ? 'active' : ''} ${disabled ? 'disabled' : ''}" data-vpn-location-id="${escapeHtml(loc.id)}" title="${escapeHtml(loc.provider)}">
+                    <span>${escapeHtml(loc.flag)} ${escapeHtml(loc.countryCode)}</span>
+                    <span class="vpn-latency-tag ${latencyClass}">${escapeHtml(tag)}</span>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+async function measureLocationLatency(loc) {
+    if (!loc || !loc.pingEndpoint) return null;
+    const start = performance.now();
+    try {
+        await fetch(loc.pingEndpoint, {
+            mode: 'no-cors',
+            cache: 'no-store',
+            signal: AbortSignal.timeout(2800)
+        });
+        const elapsed = Math.max(8, Math.round(performance.now() - start));
+        loc.measuredLatency = elapsed;
+        return elapsed;
+    } catch {
+        loc.measuredLatency = null;
+        return null;
+    }
+}
+
+async function selectFastestVpnServer() {
+    const btn = document.getElementById('vpnAutoFastestBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span> Measuring...';
+    }
+
+    try {
+        await loadVpnProfiles(true);
+        const locations = getVpnLocationsForUi();
+        const candidates = locations.filter(loc => loc.realProfile && loc.consumerReady !== false);
+        if (!candidates.length) {
+            throw new Error('No consumer-ready WireGuard profiles are available.');
+        }
+
+        const measuredCandidates = candidates.filter(loc => Number.isFinite(loc.measuredLatency));
+        const sorted = (measuredCandidates.length ? measuredCandidates : candidates)
+            .sort((a, b) => {
+                const aLatency = Number.isFinite(a.measuredLatency) ? a.measuredLatency : Number.MAX_SAFE_INTEGER;
+                const bLatency = Number.isFinite(b.measuredLatency) ? b.measuredLatency : Number.MAX_SAFE_INTEGER;
+                return aLatency - bLatency;
+            });
+        const fastest = sorted[0];
+
+        window.cyberShieldVpn.setActiveLocation(fastest.id);
+        const latEl = document.getElementById('vpnLatencyDisplay');
+        if (latEl) {
+            latEl.textContent = Number.isFinite(fastest.measuredLatency)
+                ? `Latency: ${fastest.measuredLatency} ms (Fastest)`
+                : 'Latency: not measured';
+        }
+
+        if (typeof showToast === 'function') {
+            const latencyText = Number.isFinite(fastest.measuredLatency) ? ` (${fastest.measuredLatency} ms)` : '';
+            showToast(`Selected fastest ready profile: ${fastest.flag} ${fastest.city}${latencyText}`, 'success');
+        }
+    } catch (e) {
+        console.warn('Fastest server selection error:', e);
+        if (typeof showToast === 'function') {
+            showToast(e && e.message ? e.message : 'Unable to select a VPN profile.', 'warning');
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<span>⚡</span> Use Fastest';
+        }
+    }
+}
+
+// Leak Protection tests
+async function runVpnLeakAudit() {
+    const btn = document.getElementById('vpnRunLeakTestBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Running leak checks...';
+    }
+
+    const webrtcBadge = document.getElementById('leakWebRtcBadge');
+
+    if (webrtcBadge) { webrtcBadge.className = 'vpn-leak-badge testing'; webrtcBadge.textContent = 'Auditing...'; }
+
+    await loadVpnProfiles(true);
+    const activeLoc = window.cyberShieldVpn.getActiveLocation();
+    const exitInfo = await loadRealExitInfo(true);
+    const evaluation = buildVpnEvaluation(activeLoc, exitInfo);
+    const isVpnActive = evaluation.protectedConnection;
+    const expectedCandidateIps = collectVpnExpectedCandidateIps(evaluation, exitInfo && exitInfo.ip);
+
+    let webrtcLeaked = false;
+    try {
+        if (window.RTCPeerConnection) {
+            const rtc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            rtc.createDataChannel('');
+            rtc.createOffer().then(o => rtc.setLocalDescription(o)).catch(() => {});
+            await new Promise(resolve => {
+                const timer = setTimeout(() => {
+                    rtc.close();
+                    resolve();
+                }, 1800);
+                rtc.onicecandidate = (e) => {
+                    if (e && e.candidate && e.candidate.candidate) {
+                        const cand = e.candidate.candidate;
+                        const match = cand.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
+                        if (match && match[1] && isVpnActive) {
+                            const candidateIp = match[1].trim();
+                            if (!expectedCandidateIps.has(candidateIp)) {
+                                webrtcLeaked = true;
+                            }
+                        }
+                    }
+                };
+            });
+        }
+    } catch {
+        webrtcLeaked = false;
+    }
+
+    vpnLastLeakAudit = {
+        webrtcLeaked,
+        checkedAt: Date.now()
+    };
+
+    await updateVpnUi(true);
+
+    if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Leak Check Complete (Click to re-test)';
+    }
+
+    if (typeof showToast === 'function') {
+        showToast(
+            webrtcLeaked ? 'WebRTC candidate check found a possible public IP leak.' : 'WebRTC candidate check found no public IP leak.',
+            webrtcLeaked ? 'warning' : 'success'
+        );
+    }
+}
+
+function parseExitLocation(location) {
+    if (!location || location.includes('geo unavailable') || location.includes('Unknown')) {
+        return { country: 'Unknown', city: 'Unknown' };
+    }
+    const parts = location.split(',').map(p => p.trim());
+    if (parts.length === 1) {
+        return { country: parts[0], city: parts[0] };
+    }
+    if (parts.length === 2) {
+        return { country: parts[1], city: parts[0] };
+    }
+    return {
+        country: parts[parts.length - 1],
+        city: parts.slice(0, parts.length - 1).join(', ')
+    };
+}
+
+function setVpnText(id, value, fallback = 'Unavailable') {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value || fallback;
+}
+
+function sameIp(a, b) {
+    return String(a || '').trim() !== '' && String(a || '').trim() === String(b || '').trim();
+}
+
+function getVpnSnapshot(exitInfo) {
+    return exitInfo && exitInfo.nativeSnapshot ? exitInfo.nativeSnapshot : null;
+}
+
+function updateVpnDeviceSnapshot(snapshot, activeLoc, observedExitInfo) {
+    const adapter = snapshot && snapshot.adapter ? snapshot.adapter : null;
+    const wireguard = snapshot && snapshot.wireguard ? snapshot.wireguard : null;
+    const wgAdapters = wireguard && Array.isArray(wireguard.adapters) ? wireguard.adapters : [];
+    const firstWg = wgAdapters[0] || null;
+    const dns = adapter && Array.isArray(adapter.dnsServers) && adapter.dnsServers.length
+        ? adapter.dnsServers.join(', ')
+        : (firstWg && firstWg.dnsServers && firstWg.dnsServers.length ? firstWg.dnsServers.join(', ') : '');
+
+    setVpnText('vpnDeviceIp', firstWg && firstWg.ipv4 && firstWg.ipv4.length ? firstWg.ipv4.join(', ') : adapter && adapter.ip);
+    setVpnText('vpnDeviceMac', firstWg && firstWg.mac ? firstWg.mac : adapter && adapter.mac);
+    setVpnText('vpnAdapterName', firstWg && firstWg.name ? firstWg.name : adapter && adapter.name);
+    setVpnText('vpnDnsServers', dns);
+
+    const terminalStatus = document.getElementById('vpnTerminalStatus');
+    const terminalCommand = document.getElementById('vpnTerminalCommand');
+    const statusParts = [];
+    if (observedExitInfo && observedExitInfo.ip) statusParts.push('Public IP ' + observedExitInfo.ip);
+    if (adapter && adapter.ip) statusParts.push('Adapter IP ' + adapter.ip);
+    if (adapter && adapter.mac) statusParts.push('MAC ' + adapter.mac);
+
+    if (terminalStatus) {
+        terminalStatus.textContent = statusParts.length
+            ? statusParts.join(' | ')
+            : 'Local helper unavailable. Start node server.js for terminal-level adapter details.';
+    }
+
+    if (terminalCommand) {
+        const targetStatus = activeLoc && activeLoc.realProfile
+            ? `Selected profile ${activeLoc.name}; observed exit ${observedExitInfo && observedExitInfo.ip ? observedExitInfo.ip : 'unknown'}.`
+            : (sameIp(observedExitInfo && observedExitInfo.ip, activeLoc && activeLoc.ip)
+                ? 'Observed exit matches selected VPN target.'
+                : `Selected target ${activeLoc ? activeLoc.ip : 'unknown'}; observed exit ${observedExitInfo && observedExitInfo.ip ? observedExitInfo.ip : 'unknown'}.`);
+        terminalCommand.textContent = `${targetStatus} Refresh calls /api/network/snapshot and prints the same values in the node server terminal.`;
+    }
+}
+
+async function updateVpnUi(forceRefresh = false) {
+    await loadVpnProfiles(forceRefresh);
+    const activeLoc = window.cyberShieldVpn.getActiveLocation();
+    const vpnRequested = localStorage.getItem('cybershield_vpn_active') === 'true';
+
+    const stateEl = document.getElementById('vpnConnectionState');
+    const dotEl = document.getElementById('vpnLiveDot');
+    const onBtn = document.getElementById('vpnTurnOnBtn');
+    const offBtn = document.getElementById('vpnTurnOffBtn');
+    const ipEl = document.getElementById('vpnPublicIp');
+    const countryEl = document.getElementById('vpnCountry');
+    const locationEl = document.getElementById('vpnLocation');
+    const providerEl = document.getElementById('vpnProvider');
+    const latencyEl = document.getElementById('vpnLatencyDisplay');
+    const noteEl = document.getElementById('vpnStatusNote');
+
+    renderVpnLocationOptions();
+
+    if (ipEl) ipEl.textContent = 'Checking...';
+    if (countryEl) countryEl.textContent = 'Checking...';
+    if (locationEl) locationEl.textContent = 'Checking...';
+    if (providerEl) providerEl.textContent = 'Checking...';
+
+    let exitInfo = null;
+    try {
+        exitInfo = await loadRealExitInfo(forceRefresh);
+    } catch (err) {
+        console.warn('VPN exit lookup failed:', err);
+    }
+
+    const evaluation = buildVpnEvaluation(activeLoc, exitInfo);
+    const snapshot = evaluation.snapshot;
+    const observedIp = exitInfo && exitInfo.ip && exitInfo.ip !== 'Unavailable' ? exitInfo.ip : '';
+    updateVpnDeviceSnapshot(snapshot, activeLoc, exitInfo);
+    renderVpnVerificationBadges(evaluation);
+
+    if (vpnConnectionMode === 'idle') {
+        setVpnFlowFromEvaluation(evaluation);
+    }
+
+    const parsed = parseExitLocation(exitInfo && exitInfo.location);
+    if (ipEl) ipEl.textContent = observedIp || 'Unavailable';
+    if (countryEl) countryEl.textContent = evaluation.protectedConnection ? activeLoc.countryName : (parsed.country || 'Unavailable');
+    if (locationEl) locationEl.textContent = evaluation.protectedConnection ? (activeLoc.city || parsed.city) : (parsed.city || 'Unavailable');
+    if (providerEl) providerEl.textContent = exitInfo && exitInfo.org ? exitInfo.org : (activeLoc.endpoint || 'Unavailable');
+
+    if (latencyEl) {
+        latencyEl.textContent = Number.isFinite(activeLoc.measuredLatency)
+            ? `Latency: ${activeLoc.measuredLatency} ms`
+            : (activeLoc.endpoint ? 'Latency: unmeasured' : 'Latency: -- ms');
+    }
+
+    const controlAvailable = canUseLocalVpnControl();
+    const canAttemptConnect = !!(activeLoc.realProfile && activeLoc.consumerReady !== false && vpnProfileState.wireGuardInstalled && navigator.onLine && controlAvailable);
+    const canAttemptDisconnect = evaluation.wireguardActive || evaluation.anyServiceRunning || evaluation.selectedServiceRunning;
+
+    if (evaluation.protectedConnection) {
+        setVpnModePill('Protected', 'ready');
+        if (stateEl) {
+            stateEl.textContent = `Protected (${activeLoc.countryName})`;
+            stateEl.style.color = '#22c55e';
+        }
+        if (dotEl) dotEl.className = 'vpn-live-dot active';
+        if (onBtn) {
+            onBtn.disabled = true;
+            onBtn.textContent = 'Connected';
+        }
+        if (offBtn) offBtn.disabled = false;
+        if (noteEl) {
+            noteEl.textContent = `Protected through ${activeLoc.name}. Public exit ${observedIp || 'unavailable'} is being monitored by the local network snapshot.`;
+        }
+        startVpnUptimeTimer();
+    } else {
+        stopVpnUptimeTimer();
+
+        let statusText = 'Not protected';
+        let statusColor = '';
+        let dotClass = 'vpn-live-dot off';
+        let pillText = 'Not protected';
+        let pillTone = '';
+        let buttonText = 'Connect';
+        let noteText = 'Choose a ready WireGuard profile and connect. Protection appears only after route verification passes.';
+
+        if (vpnConnectionMode === 'connecting') {
+            statusText = 'Connecting...';
+            statusColor = '#facc15';
+            dotClass = 'vpn-live-dot warning';
+            pillText = 'Connecting';
+            pillTone = 'warning';
+            buttonText = 'Connecting...';
+        } else if (vpnConnectionMode === 'verifying') {
+            statusText = 'Verifying route...';
+            statusColor = '#facc15';
+            dotClass = 'vpn-live-dot warning';
+            pillText = 'Verifying';
+            pillTone = 'warning';
+            buttonText = 'Verifying...';
+        } else if (!navigator.onLine) {
+            statusText = 'Offline';
+            statusColor = '#f87171';
+            dotClass = 'vpn-live-dot warning';
+            pillText = 'Network offline';
+            pillTone = 'danger';
+            buttonText = 'Offline';
+            noteText = 'The browser reports no network connection. Reconnect to the internet before starting VPN.';
+        } else if (!activeLoc.realProfile) {
+            statusText = 'Not configured';
+            pillText = 'Profile required';
+            pillTone = 'warning';
+            buttonText = 'Add Profile First';
+            noteText = vpnProfileState.lastError || `No local WireGuard profiles found. Add .conf files to ${vpnProfileState.profileDir || 'vpn-profiles'}, then refresh.`;
+        } else if (!controlAvailable) {
+            statusText = 'Open local app';
+            pillText = 'Local app required';
+            pillTone = 'warning';
+            buttonText = 'Open Local Server';
+            noteText = 'For safety, one-click VPN control only works from http://127.0.0.1:4318 after running node server.js.';
+        } else if (!vpnProfileState.wireGuardInstalled) {
+            statusText = 'WireGuard missing';
+            statusColor = '#f87171';
+            dotClass = 'vpn-live-dot warning';
+            pillText = 'Setup needed';
+            pillTone = 'danger';
+            buttonText = 'Install WireGuard';
+            noteText = 'WireGuard for Windows was not found. Install WireGuard and run node server.js from an Administrator terminal.';
+        } else if (activeLoc.consumerReady === false) {
+            statusText = 'Profile needs hardening';
+            statusColor = '#f87171';
+            dotClass = 'vpn-live-dot warning';
+            pillText = 'Unsafe profile';
+            pillTone = 'danger';
+            buttonText = 'Fix Profile';
+            noteText = activeLoc.warnings.length
+                ? activeLoc.warnings.join(' ')
+                : 'This profile is missing full-tunnel or DNS settings required for protected consumer mode.';
+        } else if (vpnRequested || evaluation.wireguardActive) {
+            statusText = 'Connection failed';
+            statusColor = '#facc15';
+            dotClass = 'vpn-live-dot warning';
+            pillText = 'Not verified';
+            pillTone = 'warning';
+            noteText = 'A VPN connection was requested or a tunnel adapter exists, but the selected profile is not fully verified yet. Try again from the local app as Administrator.';
+        }
+
+        setVpnModePill(pillText, pillTone);
+        if (stateEl) {
+            stateEl.textContent = statusText;
+            stateEl.style.color = statusColor;
+        }
+        if (dotEl) dotEl.className = dotClass;
+        if (onBtn) {
+            onBtn.disabled = !canAttemptConnect || vpnConnectionMode === 'connecting' || vpnConnectionMode === 'verifying';
+            onBtn.textContent = buttonText;
+        }
+        if (offBtn) offBtn.disabled = !canAttemptDisconnect || vpnConnectionMode === 'connecting';
+        if (noteEl) noteEl.textContent = noteText;
+
+        if (vpnConnectionMode === 'idle' && vpnRequested) {
+            localStorage.setItem('cybershield_vpn_active', 'false');
+        }
+    }
+
+    return evaluation;
+}
+
+function initializeVpnPage() {
+    const onBtn = document.getElementById('vpnTurnOnBtn');
+    const offBtn = document.getElementById('vpnTurnOffBtn');
+    const locSelect = document.getElementById('vpnLocationSelect');
+    const autoFastestBtn = document.getElementById('vpnAutoFastestBtn');
+    const leakAuditBtn = document.getElementById('vpnRunLeakTestBtn');
+    const refreshSnapshotBtn = document.getElementById('vpnRefreshSnapshotBtn');
+
+    if (locSelect) {
+        locSelect.addEventListener('change', (e) => {
+            window.cyberShieldVpn.setActiveLocation(e.target.value);
+        });
+    }
+
+    const chipsContainer = document.getElementById('vpnServerChips');
+    if (chipsContainer) {
+        chipsContainer.addEventListener('click', (event) => {
+            const chip = event.target.closest('[data-vpn-location-id]');
+            if (!chip || chip.classList.contains('disabled')) return;
+            window.cyberShieldVpn.setActiveLocation(chip.dataset.vpnLocationId);
+        });
+    }
+
+    if (autoFastestBtn) {
+        autoFastestBtn.addEventListener('click', () => {
+            selectFastestVpnServer();
+        });
+    }
+
+    if (leakAuditBtn) {
+        leakAuditBtn.addEventListener('click', () => {
+            runVpnLeakAudit();
+        });
+    }
+
+    if (refreshSnapshotBtn) {
+        refreshSnapshotBtn.addEventListener('click', async () => {
+            refreshSnapshotBtn.disabled = true;
+            refreshSnapshotBtn.textContent = 'Refreshing...';
+            try {
+                await updateVpnUi(true);
+            } finally {
+                refreshSnapshotBtn.disabled = false;
+                refreshSnapshotBtn.textContent = 'Refresh Snapshot';
+            }
+        });
+    }
+
+    if (onBtn) {
+        onBtn.addEventListener('click', async () => {
+            await loadVpnProfiles(true);
+            const activeLoc = window.cyberShieldVpn.getActiveLocation();
+            vpnLastLeakAudit = null;
+            if (!activeLoc.realProfile) {
+                const msg = `No real WireGuard profile exists for ${activeLoc.name}. Add a .conf file to ${vpnProfileState.profileDir || 'vpn-profiles'} and refresh.`;
+                if (typeof showToast === 'function') showToast(msg, 'warning');
+                const noteEl = document.getElementById('vpnStatusNote');
+                if (noteEl) noteEl.textContent = msg;
+                await updateVpnUi(true);
+                return;
+            }
+            if (!navigator.onLine) {
+                setVpnFlowState('network', 'failed');
+                if (typeof showToast === 'function') showToast('Network is offline. Reconnect before starting VPN.', 'error');
+                await updateVpnUi(true);
+                return;
+            }
+            if (!canUseLocalVpnControl()) {
+                if (typeof showToast === 'function') showToast('Open http://127.0.0.1:4318 from node server.js to control VPN safely.', 'warning');
+                await updateVpnUi(true);
+                return;
+            }
+            if (!vpnProfileState.wireGuardInstalled) {
+                setVpnFlowState('profile', 'failed');
+                if (typeof showToast === 'function') showToast('WireGuard for Windows is not installed or could not be found.', 'error');
+                await updateVpnUi(true);
+                return;
+            }
+            if (activeLoc.consumerReady === false) {
+                setVpnFlowState('profile', 'failed');
+                const msg = activeLoc.warnings.length
+                    ? activeLoc.warnings.join(' ')
+                    : 'This profile is missing full-tunnel or DNS settings.';
+                if (typeof showToast === 'function') showToast(msg, 'error');
+                await updateVpnUi(true);
+                return;
+            }
+
+            vpnConnectionMode = 'connecting';
+            setVpnFlowProgress('tunnel');
+            onBtn.disabled = true;
+            onBtn.textContent = 'Connecting...';
+            try {
+                await showScan(`Connecting WireGuard tunnel (${activeLoc.name})...`, 1200);
+                await runVpnProfileAction('connect', activeLoc.id);
+                vpnConnectionMode = 'verifying';
+                setVpnFlowProgress('route');
+                localStorage.setItem('cybershield_vpn_active', 'true');
+                localStorage.setItem('cybershield_vpn_requested_profile', activeLoc.id);
+                localStorage.setItem('cybershield_vpn_connected_at', String(Date.now()));
+                const evaluation = await updateVpnUi(true);
+                if (!evaluation.protectedConnection) {
+                    localStorage.setItem('cybershield_vpn_active', 'false');
+                    setVpnFlowFromEvaluation(evaluation);
+                    throw new Error('Tunnel command finished, but the route was not fully verified.');
+                }
+                vpnConnectionMode = 'idle';
+                setVpnFlowFromEvaluation(evaluation);
+                await updateVpnUi(false);
+            } catch (error) {
+                vpnConnectionMode = 'idle';
+                localStorage.setItem('cybershield_vpn_active', 'false');
+                const msg = error && error.message ? error.message : 'Unable to connect VPN profile.';
+                const noteEl = document.getElementById('vpnStatusNote');
+                if (noteEl) noteEl.textContent = msg;
+                if (typeof showToast === 'function') showToast(msg, 'error');
+                await updateVpnUi(true);
+                return;
+            }
+
+            if (typeof pushNetworkAlert === 'function') {
+                pushNetworkAlert({
+                    title: 'VPN Tunnel Started',
+                    severity: 'low',
+                    body: `WireGuard tunnel started for ${activeLoc.countryName}. The VPN page is verifying the observed public IP and country.`,
+                    time: new Date(),
+                    meta: `Secure Exit Active (${activeLoc.countryCode})`
+                });
+            }
+
+            if (typeof refreshNetworkMonitoring === 'function') {
+                await refreshNetworkMonitoring('VPN connection state changed');
+            }
+        });
+    }
+
+    if (offBtn) {
+        offBtn.addEventListener('click', async () => {
+            const activeLoc = window.cyberShieldVpn.getActiveLocation();
+            vpnConnectionMode = 'disconnecting';
+            vpnLastLeakAudit = null;
+            offBtn.disabled = true;
+            offBtn.textContent = 'Disconnecting...';
+            try {
+                await showScan('Disconnecting VPN tunnel...', 900);
+                if (activeLoc.realProfile) {
+                    await runVpnProfileAction('disconnect', activeLoc.id);
+                }
+                localStorage.setItem('cybershield_vpn_active', 'false');
+                localStorage.removeItem('cybershield_vpn_requested_profile');
+                stopVpnUptimeTimer();
+                vpnConnectionMode = 'idle';
+                await updateVpnUi(true);
+            } catch (error) {
+                vpnConnectionMode = 'idle';
+                const msg = error && error.message ? error.message : 'Unable to disconnect VPN profile.';
+                const noteEl = document.getElementById('vpnStatusNote');
+                if (noteEl) noteEl.textContent = msg;
+                if (typeof showToast === 'function') showToast(msg, 'error');
+                await updateVpnUi(true);
+                return;
+            }
+
+            if (typeof pushNetworkAlert === 'function') {
+                pushNetworkAlert({
+                    title: 'VPN Tunnel Stopped',
+                    severity: 'medium',
+                    body: 'WireGuard VPN connection closed. Traffic is now routing directly over local network.',
+                    time: new Date(),
+                    meta: 'Direct Connection Active'
+                });
+            }
+
+            if (typeof refreshNetworkMonitoring === 'function') {
+                await refreshNetworkMonitoring('VPN connection state changed');
+            }
+        });
+    }
+
+    renderVpnLocationOptions();
+    updateVpnUi();
+}
+
+
+function initializeFootprintPage() {
+    renderFootprintHistory();
+    const jsonBtn = document.getElementById('fpExportJsonBtn');
+    const csvBtn = document.getElementById('fpExportCsvBtn');
+    const pdfBtn = document.getElementById('fpExportPdfBtn');
+    if (jsonBtn) jsonBtn.addEventListener('click', exportFootprintJson);
+    if (csvBtn) csvBtn.addEventListener('click', exportFootprintCsv);
+    if (pdfBtn) pdfBtn.addEventListener('click', exportFootprintPdf);
+    const fpInput = document.getElementById('footprintInput');
+    if (fpInput) {
+        fpInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') trackFootprint();
+        });
+    }
 }

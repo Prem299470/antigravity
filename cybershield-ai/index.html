@@ -10,6 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="style.css">
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="auth-locked">
     <!-- Animated Background -->
@@ -96,6 +98,17 @@
                 </div>
                 <p class="auth-message" id="authMessage" role="status" aria-live="polite"></p>
                 <button class="btn-primary auth-submit" type="submit" id="authSubmitBtn">Login</button>
+
+                <div class="auth-divider">
+                    <span>or</span>
+                </div>
+
+                <!-- Google Sign-In Button -->
+                <div class="auth-google-btn-wrap">
+                    <div id="googleSignInBtn"></div>
+                </div>
+
+                <p class="auth-google-note">Sign in or create account instantly with Google</p>
             </form>
         </div>
     </section>
@@ -141,6 +154,7 @@
                         </defs>
                     </svg>
                 </div>
+                
                 <span class="logo-text">Cyber Shield <span class="logo-ai">AI</span></span>
             </div>
         </div>
@@ -187,14 +201,7 @@
                     <span class="nav-text">Advanced Safe Browsing</span>
                 </a>
             </li>
-            <li>
-                <a href="#" class="nav-link" data-section="transaction-analyzer" id="nav-transaction">
-                    <span class="nav-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-                    </span>
-                    <span class="nav-text">Smart Investigation Engine</span>
-                </a>
-            </li>
+            
             <li>
                 <a href="#" class="nav-link" data-section="footprint-tracker" id="nav-footprint">
                     <span class="nav-icon">
@@ -325,23 +332,16 @@
                     </div>
                     <span class="stat-arrow">→</span>
                 </div>
-                <div class="stat-card" data-section="transaction-analyzer">
-                    <div class="stat-icon transaction-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-                    </div>
-                    <div class="stat-info">
-                        <h3>Smart Investigation</h3>
-                        <p>Multi-module phone number intel</p>
-                    </div>
-                    <span class="stat-arrow">→</span>
-                </div>
+                
+
+            
                 <div class="stat-card" data-section="footprint-tracker">
                     <div class="stat-icon footprint-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     </div>
                     <div class="stat-info">
                         <h3>Footprint Tracker</h3>
-                        <p>Monitor your digital presence</p>
+                        <p>Scan your digital exposure online</p>
                     </div>
                     <span class="stat-arrow">→</span>
                 </div>
@@ -351,54 +351,102 @@
                     </div>
                     <div class="stat-info">
                         <h3>Live Network Monitoring</h3>
-                        <p>Watch active connections and suspicious requests</p>
+                        <p>Real-time traffic and threat alerts</p>
+                    </div>
+                    <span class="new-badge">LIVE</span>
+                    <span class="stat-arrow">→</span>
+                </div>
+                <div class="stat-card" data-section="wifi-connections">
+                    <div class="stat-icon wifi-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+                    </div>
+                    <div class="stat-info">
+                        <h3>Wi-Fi Scanner</h3>
+                        <p>Detect rogue access points nearby</p>
                     </div>
                     <span class="stat-arrow">→</span>
                 </div>
-
+                <div class="stat-card dashboard-vpn-card" id="dashboardVpnCard">
+                    <div class="dashboard-vpn-header">
+                        <div class="stat-icon vpn-dashboard-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M9 12l2 2 4-5"/></svg>
+                        </div>
+                        <div class="stat-info">
+                            <h3>VPN</h3>
+                            <p id="dashboardVpnStatusText">Not connected</p>
+                        </div>
+                        <span class="dashboard-vpn-state off" id="dashboardVpnStateBadge">OFF</span>
+                    </div>
+                    <div class="dashboard-vpn-controls">
+                        <label class="dashboard-vpn-label" for="dashboardVpnCountry">Country / Routing</label>
+                        <select class="dashboard-vpn-select" id="dashboardVpnCountry">
+                            <option value="auto" selected>⚡ Auto (Dynamic Multi-Country)</option>
+                            <option value="germany">🇩🇪 Germany (Frankfurt)</option>
+                            <option value="japan">🇯🇵 Japan (Tokyo)</option>
+                            <option value="singapore">🇸🇬 Singapore</option>
+                            <option value="switzerland">🇨🇭 Switzerland (Zurich)</option>
+                            <option value="uk">🇬🇧 United Kingdom (London)</option>
+                            <option value="netherlands">🇳🇱 Netherlands (Amsterdam)</option>
+                            <option value="canada">🇨🇦 Canada (Toronto)</option>
+                            <option value="france">🇫🇷 France (Paris)</option>
+                            <option value="australia">🇦🇺 Australia (Sydney)</option>
+                            <option value="sweden">🇸🇪 Sweden (Stockholm)</option>
+                            <option value="iceland">🇮🇸 Iceland (Reykjavik)</option>
+                            <option value="india">🇮🇳 India (Mumbai)</option>
+                            <option value="usa">🇺🇸 USA (Ashburn)</option>
+                            <option value="beijing">🇨🇳 China (Beijing)</option>
+                            <option value="russia">🇷🇺 Russia (Moscow)</option>
+                            <option value="other">🌐 Custom Privacy Gateway</option>
+                        </select>
+                        <label class="dashboard-vpn-rotate-label" title="Automatically hop between different global countries periodically">
+                            <input type="checkbox" id="dashboardVpnAutoRotate">
+                            <span>Auto-rotate countries (dynamic hop)</span>
+                        </label>
+                        <div class="dashboard-vpn-actions">
+                            <button type="button" class="btn-primary dashboard-vpn-btn" id="dashboardVpnOnBtn">Turn On VPN</button>
+                            <button type="button" class="btn-secondary dashboard-vpn-btn" id="dashboardVpnOffBtn">Turn Off VPN</button>
+                            <button type="button" class="btn-secondary dashboard-vpn-btn dashboard-vpn-switch-btn" id="dashboardVpnSwitchBtn" title="Immediately hop to a different country">🔀 Switch Country</button>
+                        </div>
+                    </div>
+                    <div class="dashboard-vpn-details">
+                        <div><span>Connected Country</span><strong id="dashboardVpnCountryDisplay">None</strong></div>
+                        <div><span>Masked IP</span><strong id="dashboardVpnIpDisplay">Not masked</strong></div>
+                    </div>
+                </div>
                 <div class="stat-card" data-section="live-gps-tracker">
                     <div class="stat-icon gps-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/><circle cx="12" cy="12" r="8" stroke-dasharray="4 2"/></svg>
                     </div>
                     <div class="stat-info">
                         <h3>Live GPS Tracker</h3>
-                        <p>Track your real-time location via GPS</p>
+                        <p>Monitor device location in real time</p>
                     </div>
-                    <span class="stat-arrow">→</span>
-                </div>
-                <div class="stat-card" data-section="wifi-connections" id="dashWifiCard" style="position:relative;overflow:hidden;">
-                    <div class="stat-icon" style="background:linear-gradient(135deg,rgba(14,165,233,.2),rgba(99,102,241,.2));border-radius:12px;padding:.75rem;">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-                    </div>
-                    <div class="stat-info">
-                        <h3>Wi-Fi Scanner</h3>
-                        <p id="dashWifiStatus">Scan to see connected devices</p>
-                    </div>
-                    <span id="dashWifiCount" style="display:none;position:absolute;top:.75rem;right:2.5rem;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:#fff;font-size:.7rem;font-weight:700;padding:.2rem .6rem;border-radius:10px;"></span>
+                    <span class="new-badge">LIVE</span>
                     <span class="stat-arrow">→</span>
                 </div>
                 <div class="stat-card" data-section="fake-profile-detector">
-                    <div class="stat-icon" style="background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(236,72,153,.2));border-radius:12px;padding:.75rem;">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><line x1="17" y1="3" x2="20" y2="6"/><line x1="20" y1="3" x2="17" y2="6"/></svg>
+                    <div class="stat-icon profile-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><line x1="17" y1="3" x2="20" y2="6"/><line x1="20" y1="3" x2="17" y2="6"/></svg>
                     </div>
                     <div class="stat-info">
-                        <h3>Fake Social Media Profile Detector</h3>
-                        <p>Detect AI-generated &amp; fake social media profiles</p>
+                        <h3>Fake Profile Detector</h3>
+                        <p>AI-powered social media profile check</p>
                     </div>
+                    <span class="new-badge">AI</span>
                     <span class="stat-arrow">→</span>
                 </div>
                 <div class="stat-card emergency-card" data-section="emergency-response">
                     <div class="stat-icon emergency-stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.93 4.93l14.14 14.14M12 2v4m0 12v4m-8-10H2m20 0h-2"/></svg>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.93 4.93l14.14 14.14M12 2v4m0 12v4m-8-10H2m20 0h-2m-2.93-6.07l-1.41 1.41m-7.32 7.32l-1.41 1.41m0-10.14l1.41 1.41m7.32 7.32l1.41 1.41"/></svg>
                     </div>
                     <div class="stat-info">
-                        <h3>Emergency Response</h3>
-                        <p>Recovery steps if hacked</p>
+                        <h3>Emergency Mode</h3>
+                        <p>Instant SOS and critical alerts</p>
                     </div>
+                    <span class="emergency-badge">SOS</span>
                     <span class="stat-arrow">→</span>
                 </div>
             </div>
-
             <div class="dashboard-banner">
                 <div class="banner-content">
                     <div class="banner-icon">
@@ -630,64 +678,7 @@
             </div>
         </section>
 
-        <!-- ========== SMART INVESTIGATION ENGINE ========== -->
-        <section class="content-section" id="section-transaction-analyzer">
-            <div class="section-header">
-                <h1>Smart Investigation Engine</h1>
-                <p class="section-subtitle">A multi-module ML-powered intelligence dashboard for phone number analysis</p>
-            </div>
-            <div class="tool-container">
-                <div class="input-card">
-                    <h2>Check a Number</h2>
-                    <p class="input-desc">This checker now prefers exact number matches from previous cases saved in this browser. Weak partial matches are shown separately and do not count as confirmed case hits.</p>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label>Phone Number</label>
-                            <input type="tel" id="txPhoneNumber" class="input-field" placeholder="e.g., +91 98765 43210">
-                        </div>
-                        <div class="form-group">
-                            <label>Claimed Name (optional)</label>
-                            <input type="text" id="txClaimedName" class="input-field" placeholder="e.g., Rahul Sharma">
-                        </div>
-                        <div class="form-group">
-                            <label>Interaction Type</label>
-                            <select id="txInteractionType" class="input-field">
-                                <option value="upi">UPI / payment request</option>
-                                <option value="call">Phone call</option>
-                                <option value="whatsapp">WhatsApp / chat</option>
-                                <option value="sms">SMS / message</option>
-                                <option value="seller">Seller / marketplace</option>
-                                <option value="support">Customer support / service desk</option>
-                                <option value="personal">Personal contact</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Casebook Match Mode</label>
-                            <select id="txCaseMode" class="input-field">
-                                <option value="strict">Exact number match only</option>
-                                <option value="last10">Allow cautious last 10 digits fallback</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group full-width">
-                        <label>Conversation or Case Details (optional)</label>
-                        <textarea id="txDetails" class="input-textarea" rows="4" placeholder="Paste what they said, why they contacted you, payment request details, urgency, refund request, OTP ask, etc."></textarea>
-                    </div>
-                    <button class="btn-primary" onclick="analyzePhoneNumberReputation()">
-                        <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>
-                        Check Number
-                    </button>
-                </div>
-                <div class="results-card hidden" id="transactionResults">
-                    <div class="results-header">
-                        <h2>Investigation Report</h2>
-                        <div class="threat-badge" id="transactionThreatBadge">—</div>
-                    </div>
-                    <div class="results-body" id="transactionResultsBody"></div>
-                </div>
-            </div>
-        </section>
-
+        
         <!-- ========== DIGITAL FOOTPRINT TRACKER ========== -->
         <section class="content-section" id="section-footprint-tracker">
             <div class="section-header">
@@ -697,9 +688,9 @@
             <div class="tool-container">
                 <div class="input-card">
                     <h2>Track Your Digital Presence</h2>
-                    <p class="input-desc">Enter your username, phone number, or full name to check exposure. Username mode uses the Cyberlayers digital_footprint_tracker baseline plus extended checks.</p>
-                    <p class="input-desc">Phone mode uses public evidence only, and full-name mode now runs a broader multi-platform public sweep across social apps, professional networks, communities, creative sites, and optional people-search traces.</p>
-                    <input type="text" id="footprintInput" class="input-field" placeholder="Enter username, phone number, or full name">
+                    <p class="input-desc">Enter a name, phone number, email ID, username, or all of them together to check public exposure.</p>
+                    <p class="input-desc">The scan opens verified public APIs where available and creates direct website/search links for places where your data may be visible.</p>
+                    <input type="text" id="footprintInput" class="input-field" placeholder="Name: Alex Kumar, Email: alex@example.com, Phone: +919876543210, Username: alexkumar">
                     <div class="checkbox-group">
                         <label class="checkbox-option">
                             <input type="checkbox" id="fpSocial" checked> <span>Social Media</span>
@@ -721,6 +712,14 @@
                         <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
                         Scan Digital Footprint
                     </button>
+                    <div class="footprint-toolbar">
+                        <div class="footprint-history-chips" id="footprintHistoryChips"></div>
+                        <div class="footprint-export-group">
+                            <button type="button" class="footprint-export-btn" id="fpExportJsonBtn">JSON</button>
+                            <button type="button" class="footprint-export-btn" id="fpExportCsvBtn">CSV</button>
+                            <button type="button" class="footprint-export-btn" id="fpExportPdfBtn">PDF</button>
+                        </div>
+                    </div>
 
                     <!-- Privacy Tips -->
                     <div class="tips-section">
@@ -743,7 +742,7 @@
                         </div>
                         <div class="tip-item">
                             <span class="tip-number">5</span>
-                            <div><strong>Use a VPN on Public Wi-Fi</strong><p>Encrypt your traffic to prevent snooping on open networks.</p></div>
+                            <div><strong>Avoid Sensitive Tasks on Public Wi-Fi</strong><p>Use mobile data or a trusted network for banking, password resets, and private account changes.</p></div>
                         </div>
                         <div class="tip-item">
                             <span class="tip-number">6</span>
@@ -761,8 +760,45 @@
                 </div>
                 <div class="results-card hidden" id="footprintResults">
                     <div class="results-header">
-                        <h2>Footprint Report</h2>
+                        <div>
+                            <h2>Footprint Report</h2>
+                            <p class="results-subtitle" id="footprintResultsSubtitle"></p>
+                        </div>
                         <div class="threat-badge" id="footprintThreatBadge">—</div>
+                    </div>
+                    <div class="footprint-stats-bar" id="footprintStatsBar" style="display:none;">
+                        <div class="footprint-stat-box">
+                            <div class="footprint-stat-num" id="fpStatTotal">0</div>
+                            <div class="footprint-stat-label">Sources</div>
+                        </div>
+                        <div class="footprint-stat-box">
+                            <div class="footprint-stat-num" id="fpStatVerified">0</div>
+                            <div class="footprint-stat-label">Verified</div>
+                        </div>
+                        <div class="footprint-stat-box">
+                            <div class="footprint-stat-num" id="fpStatDomains">0</div>
+                            <div class="footprint-stat-label">Websites</div>
+                        </div>
+                        <div class="footprint-stat-box">
+                            <div class="footprint-stat-num" id="fpStatConfidence">0%</div>
+                            <div class="footprint-stat-label">Avg Confidence</div>
+                        </div>
+                    </div>
+                    <div class="confidence-bar-wrap" id="fpConfidenceWrap" style="display:none;">
+                        <div class="confidence-bar-header">
+                            <span>Match confidence</span>
+                            <strong id="fpConfidenceSummary">0 Exact · 0 Strong · 0 Possible</strong>
+                        </div>
+                        <div class="confidence-stacked-bar">
+                            <div class="confidence-segment-exact" id="fpBarExact" style="width:0%;"></div>
+                            <div class="confidence-segment-strong" id="fpBarStrong" style="width:0%;"></div>
+                            <div class="confidence-segment-possible" id="fpBarPossible" style="width:0%;"></div>
+                        </div>
+                        <div class="confidence-legend">
+                            <span class="confidence-legend-item"><span class="legend-dot exact"></span>Exact</span>
+                            <span class="confidence-legend-item"><span class="legend-dot strong"></span>Strong</span>
+                            <span class="confidence-legend-item"><span class="legend-dot possible"></span>Possible</span>
+                        </div>
                     </div>
                     <div class="results-body" id="footprintResultsBody"></div>
                 </div>
@@ -1041,6 +1077,10 @@
                             <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-1.9 5.4A8.5 8.5 0 0 1 6.6 18L3 19l1.1-3.5A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.5 9.5c.2-.5.4-.5.6-.5h.5c.2 0 .4 0 .5.4.2.5.7 1.7.7 1.8.1.2.1.4 0 .6-.1.2-.2.3-.4.5-.1.1-.3.3-.4.4-.1.1-.2.2-.1.4.1.2.6 1 1.3 1.6.9.8 1.6 1 1.9 1.2.2.1.3.1.5 0 .1-.1.5-.6.7-.9.2-.3.3-.3.6-.2.2.1 1.5.7 1.7.8.2.1.4.2.4.3 0 .1 0 .8-.3 1.4-.3.6-1.5 1.1-2 1.1-.5 0-1 .1-3.2-.8-2.6-1-4.2-3.7-4.3-3.9-.1-.2-1.1-1.4-1.1-2.7 0-1.3.7-1.9.9-2.2Z"/></svg></span>
                             Share on WhatsApp
                         </button>
+                        <a class="btn-secondary gps-share-btn hidden" id="gpsGoogleMapsBtn" href="#" target="_blank" rel="noopener noreferrer">
+                            <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg></span>
+                            Open in Google Maps
+                        </a>
                     </div>
 
                     <!-- GPS Status Bar -->
@@ -1101,8 +1141,12 @@
                             <div class="gps-stat-value" id="gpsLiveTime">—</div>
                             <div class="gps-stat-label">Last Updated</div>
                         </div>
+                        <div class="gps-stat-card">
+                            <div class="gps-stat-icon">GPS</div>
+                            <div class="gps-stat-value" id="gpsFixQuality">—</div>
+                            <div class="gps-stat-label">Fix Quality</div>
+                        </div>
                     </div>
-
                     <!-- Live Map -->
                     <div class="gps-map-wrap hidden" id="gpsMapWrap">
                         <div id="gpsLiveMapContainer" class="gps-live-map-container"></div>
@@ -1179,7 +1223,7 @@
                         <h3 class="tips-title">📡 How Live GPS Tracking Works</h3>
                         <div class="tip-item">
                             <span class="tip-number">1</span>
-                            <div><strong>High-Accuracy GPS</strong><p>Uses your device's hardware GPS sensor with <code>enableHighAccuracy</code> for best precision (within 3-10 meters).</p></div>
+                            <div><strong>High-Accuracy GPS</strong><p>Uses your device's precise location provider with <code>enableHighAccuracy</code> and reports the live accuracy radius.</p></div>
                         </div>
                         <div class="tip-item">
                             <span class="tip-number">2</span>
